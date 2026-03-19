@@ -16,12 +16,16 @@ class DailyReportMetrics {
   final List<Sale> sales;
   final double totalUSD;
   final double totalVES;
+  final Map<String, double> paymentsUSD; // Desglose por método USD
+  final Map<String, double> paymentsVES; // Desglose por método VES
   final bool isClosed;
 
   DailyReportMetrics({
     required this.sales,
     required this.totalUSD,
     required this.totalVES,
+    required this.paymentsUSD,
+    required this.paymentsVES,
     this.isClosed = false,
   });
 }
@@ -39,8 +43,32 @@ class ReportsNotifier extends AsyncNotifier<DailyReportMetrics> {
 
     final totalUSD = sales.fold(0.0, (sum, sale) => sum + sale.totalUSD);
     final totalVES = sales.fold(0.0, (sum, sale) => sum + sale.totalVES);
+    
+    // Desglose por método de pago
+    final Map<String, double> paymentsUSD = {};
+    final Map<String, double> paymentsVES = {};
+    for (final sale in sales) {
+      for (final payment in sale.payments) {
+        paymentsUSD.update(
+          PaymentMethods.label(payment.method),
+          (value) => value + payment.amount,
+          ifAbsent: () => payment.amount,
+        );
+        paymentsVES.update(
+          PaymentMethods.label(payment.method),
+          (value) => value + payment.amount * sale.exchangeRate,
+          ifAbsent: () => payment.amount * sale.exchangeRate,
+        );
+      }
+    }
 
-    return DailyReportMetrics(sales: sales, totalUSD: totalUSD, totalVES: totalVES);
+    return DailyReportMetrics(
+      sales: sales,
+      totalUSD: totalUSD,
+      totalVES: totalVES,
+      paymentsUSD: paymentsUSD,
+      paymentsVES: paymentsVES,
+    );
   }
 
   Future<void> refresh() async {
@@ -78,6 +106,8 @@ class ReportsNotifier extends AsyncNotifier<DailyReportMetrics> {
         sales: currentMetrics.sales,
         totalUSD: currentMetrics.totalUSD,
         totalVES: currentMetrics.totalVES,
+        paymentsUSD: currentMetrics.paymentsUSD,
+        paymentsVES: currentMetrics.paymentsVES,
         isClosed: true,
       ));
 

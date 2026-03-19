@@ -1,6 +1,6 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:inventary/features/sales/domain/models/payment.dart';
+import 'package:inventary/features/sales/domain/entities/payment.dart';
 
 // Provider to hold the list of payments for the current sale
 final paymentsProvider = StateNotifierProvider<PaymentsNotifier, List<Payment>>((ref) {

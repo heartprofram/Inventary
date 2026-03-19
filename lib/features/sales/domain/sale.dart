@@ -32,8 +32,10 @@ class PaymentMethods {
     pendiente: 'Pago Pendiente',
   };
 
-  static String label(String method) => labels[method] ?? method;
+  String label(String method) => labels[method] ?? method;
 }
+
+String get paymentMethodLabel => payments.isEmpty ? 'Efectivo' : payments.first.method;
 
 class Sale {
   final String id;
@@ -70,6 +72,25 @@ class Sale {
     if (_totalVESTmp >= 0) return _totalVESTmp;
     return totalUSD * exchangeRate;
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id_venta': id,
+      'fecha': date.toIso8601String(),
+      'total_usd': totalUSD,
+      'total_ves': totalVES,
+      'tasa_cambio': exchangeRate,
+      'metodos_pago': payments.map((p) => p.toJson()).toList(),
+      'detalles': debtorName ?? '',
+      'detalles_productos': details.map((d) => {
+        'id_producto': d.productId,
+        'nombre_producto': d.productName,
+        'cantidad': d.quantity,
+        'precio_unitario_usd': d.unitPriceUSD,
+        'subtotal_usd': d.subtotalUSD,
+      }).toList(),
+    };
+  }
 }
 
 class Payment {
@@ -81,12 +102,10 @@ class Payment {
     required this.amount,
   });
 
-  Map<String, dynamic> toJson() {
-    return {
-      'method': method,
-      'amount': amount,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+    'method': method,
+    'amount': amount,
+  };
 
   factory Payment.fromJson(Map<String, dynamic> json) {
     return Payment(

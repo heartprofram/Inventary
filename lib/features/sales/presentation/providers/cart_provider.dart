@@ -100,7 +100,30 @@ final cartProvider = NotifierProvider<CartNotifier, List<SaleDetail>>(() {
   return CartNotifier();
 });
 
+// Extension para pending payments
+extension CartNotifierExt on CartNotifier {
+  void addProductByDetail(SaleDetail detail) {
+    final existingIndex = state.indexWhere((item) => item.productId == detail.productId);
+    if (existingIndex >= 0) {
+      final currentItem = state[existingIndex];
+      state = [
+        ...state.sublist(0, existingIndex),
+        SaleDetail(
+          productId: currentItem.productId,
+          productName: currentItem.productName,
+          quantity: currentItem.quantity + detail.quantity,
+          unitPriceUSD: currentItem.unitPriceUSD,
+        ),
+        ...state.sublist(existingIndex + 1),
+      ];
+    } else {
+      state = [...state, detail];
+    }
+  }
+}
+
 // Provider para el método de pago seleccionado
 final paymentMethodProvider = StateProvider<String>((ref) {
   return PaymentMethods.efectivoUsd;
 });
+

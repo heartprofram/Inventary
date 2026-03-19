@@ -65,6 +65,19 @@ class ReportsScreen extends ConsumerWidget {
                   icon: Icons.money,
                   color: Colors.orange,
                 ),
+                const SizedBox(height: 24),
+                if (metrics.paymentsUSD.isNotEmpty) ...[
+                  const Text('Desglose por Método:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  ...metrics.paymentsUSD.entries.map((entry) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.payment),
+                      title: Text(entry.key),
+                      subtitle: Text('USD: \$${entry.value.toStringAsFixed(2)} | VES: Bs.${(entry.value * metrics.sales.isNotEmpty ? metrics.sales.first.exchangeRate : 36.0).toStringAsFixed(2)}'),
+                      trailing: Icon(Icons.arrow_forward_ios, size: 16),
+                    ),
+                  )),
+                ],
                 const Spacer(),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(

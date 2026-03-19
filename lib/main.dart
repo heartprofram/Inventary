@@ -6,6 +6,7 @@ import 'package:inventary/features/settings/presentation/screens/settings_screen
 import 'package:inventary/features/reports/presentation/screens/reports_screen.dart';
 import 'package:inventary/features/reports/presentation/screens/movements_screen.dart';
 import 'package:inventary/features/sales/presentation/screens/sales_history_screen.dart';
+import 'package:inventary/features/sales/presentation/screens/pending_payments_screen.dart';
 import 'package:inventary/core/services/google_api_service.dart';
 import 'package:inventary/core/providers/core_providers.dart';
 
@@ -67,6 +68,7 @@ class _MainContentState extends State<_MainContent> {
     PosScreen(),
     ReportsScreen(),
     SalesHistoryScreen(),
+    const PendingPaymentsScreen(),
     MovementsScreen(),
     SettingsScreen(),
   ];
@@ -76,6 +78,7 @@ class _MainContentState extends State<_MainContent> {
     'Ventas (POS)',
     'Cierre de Caja',
     'Historial Ventas',
+    'Cuentas por Cobrar',
     'Movimientos',
     'Configuración'
   ];
@@ -146,6 +149,12 @@ class _MainContentState extends State<_MainContent> {
             ListTile(
               leading: const Icon(Icons.list_alt),
               title: const Text('Movimientos'),
+              selected: _selectedIndex == 5,
+              onTap: () => _onItemTapped(5),
+            ),
+            ListTile(
+              leading: const Icon(Icons.pending_actions),
+              title: const Text('Cuentas por Cobrar'),
               selected: _selectedIndex == 4,
               onTap: () => _onItemTapped(4),
             ),

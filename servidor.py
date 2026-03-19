@@ -145,6 +145,30 @@ class PosHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._error(str(e))
 
+        elif path == '/api/ventas/pendientes':
+            try:
+                all_ventas = sheets_get('Ventas!A2:H')
+                detalle_ventas = sheets_get('DetalleVentas!A2:F')
+                
+                pendientes = []
+                for venta_row in all_ventas:
+                    if len(venta_row) >= 7 and 'pendiente' in str(venta_row[5]).lower():
+                        # Encontrar detalles de esta venta
+                        venta_details = [det for det in detalle_ventas if det and len(det) > 0 and det[0] == venta_row[0]]
+                        
+                        pendientes.append({
+                            'id_venta': venta_row[0],
+                            'fecha': venta_row[1],
+                            'total_usd': float(venta_row[2]) if len(venta_row) > 2 and venta_row[2] else 0.0,
+                            'deudor': venta_row[7] if len(venta_row) > 7 else '',
+                            'detalles_productos': venta_details,
+                            'metodos_pago': json.loads(venta_row[5]) if len(venta_row) > 5 and venta_row[5] else []
+                        })
+                
+                self._json_response(pendientes)
+            except Exception as e:
+                self._error(str(e))
+
         elif path == '/api/movimientos':
             try:
                 rows = sheets_get('Movimientos!A2:F')
