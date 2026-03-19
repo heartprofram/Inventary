@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:inventary/core/widgets/shimmer_loading.dart';
+import 'package:inventary/core/widgets/empty_state.dart';
 import '../providers/reports_provider.dart';
 import 'movements_screen.dart';
 
@@ -11,133 +13,141 @@ class ReportsScreen extends ConsumerWidget {
     final reportsState = ref.watch(reportsProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cierre de Caja y Reportes'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              ref.read(reportsProvider.notifier).refresh();
-            },
-            tooltip: 'Actualizar',
-          ),
-        ],
-      ),
       body: reportsState.when(
         data: (metrics) {
           if (metrics.sales.isEmpty) {
-            return const Center(
-              child: Text(
-                'No hay ventas registradas el día de hoy.',
-                style: TextStyle(fontSize: 18),
-              ),
+            return EmptyState(
+              icon: Icons.analytics_outlined,
+              title: 'Sin ventas hoy',
+              message: 'Aún no se han registrado transacciones en el sistema hoy.',
+              onAction: () => ref.read(reportsProvider.notifier).refresh(),
+              actionLabel: 'Actualizar',
             );
           }
 
-          return Padding(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Resumen Diario (Reporte Z)',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                _MetricCard(
-                  title: 'Facturas Emitidas',
-                  value: metrics.sales.length.toString(),
-                  icon: Icons.receipt_long,
-                  color: Colors.blue,
-                ),
-                const SizedBox(height: 16),
-                _MetricCard(
-                  title: 'Ingresos Totales (USD)',
-                  value: '\$${metrics.totalUSD.toStringAsFixed(2)}',
-                  icon: Icons.attach_money,
-                  color: Colors.green,
+                _buildSectionHeader('Resumen del Día', 'Métricas clave de hoy'),
+                const SizedBox(height: 24),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final bool isWide = constraints.maxWidth > 600;
+                    return isWide 
+                        ? Row(
+                            children: [
+                              Expanded(child: _MetricCard(title: 'Facturas', value: metrics.sales.length.toString(), icon: Icons.receipt_long, color: Colors.blue)),
+                              const SizedBox(width: 16),
+                              Expanded(child: _MetricCard(title: 'Total USD', value: '\$${metrics.totalUSD.toStringAsFixed(2)}', icon: Icons.attach_money, color: Colors.green)),
+                            ],
+                          )
+                        : Column(
+                            children: [
+                              _MetricCard(title: 'Facturas Emitidas', value: metrics.sales.length.toString(), icon: Icons.receipt_long, color: Colors.blue),
+                              const SizedBox(height: 16),
+                              _MetricCard(title: 'Ingresos Totales (USD)', value: '\$${metrics.totalUSD.toStringAsFixed(2)}', icon: Icons.attach_money, color: Colors.green),
+                            ],
+                          );
+                  },
                 ),
                 const SizedBox(height: 16),
                 _MetricCard(
                   title: 'Ingresos Equivalentes (VES)',
                   value: 'Bs. ${metrics.totalVES.toStringAsFixed(2)}',
-                  icon: Icons.money,
+                  icon: Icons.currency_exchange,
                   color: Colors.orange,
                 ),
-                const SizedBox(height: 24),
-                if (metrics.paymentsUSD.isNotEmpty) ...[
-                  const Text('Desglose por Método:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  ...metrics.paymentsUSD.entries.map((entry) => Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.payment),
-                      title: Text(entry.key),
-                      subtitle: Text('USD: \$${entry.value.toStringAsFixed(2)} | VES: Bs.${(entry.value * (metrics.sales.isNotEmpty ? metrics.sales.first.exchangeRate : 36.0)).toStringAsFixed(2)}'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    ),
-                  )),
-                ],
-                const Spacer(),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: Colors.blueGrey,
-                  ),
-                  onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const MovementsScreen()));
-                  },
-                  icon: const Icon(Icons.list_alt, color: Colors.white),
-                  label: const Text('VER MOVIMIENTOS', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
+                const SizedBox(height: 32),
+                _buildSectionHeader('Desglose de Pagos', 'Por método seleccionado'),
                 const SizedBox(height: 16),
+                ...metrics.paymentsUSD.entries.map((entry) {
+                  final vesVal = entry.value * (metrics.sales.isNotEmpty ? metrics.sales.first.exchangeRate : 36.0);
+                  return Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey[200]!)),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: const CircleAvatar(backgroundColor: Colors.teal, foregroundColor: Colors.white, child: Icon(Icons.payment, size: 20)),
+                      title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Equivalente: Bs. ${vesVal.toStringAsFixed(2)}'),
+                      trailing: Text('\$${entry.value.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 40),
                 if (metrics.isClosed) ...[
-                  const Icon(Icons.check_circle, color: Colors.green, size: 64),
-                  const Text('Caja Cerrada Exitosamente. PDF Generado guardado en dispositivo.', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
-                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.green[200]!)),
+                    child: const Column(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 48),
+                        SizedBox(height: 12),
+                        Text('Caja Cerrada', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
+                        Text('El Reporte Z ha sido generado y sincronizado.', textAlign: TextAlign.center, style: TextStyle(color: Colors.green)),
+                      ],
+                    ),
+                  ),
                 ] else ...[
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 20),
                       backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 2,
                     ),
                     onPressed: () => _confirmCloseRegister(context, ref),
-                    icon: const Icon(Icons.point_of_sale, color: Colors.white),
-                    label: const Text('CERRAR CAJA', style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.lock_outline),
+                    label: const Text('REALIZAR CIERRE DE CAJA', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
-                ]
+                ],
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MovementsScreen())),
+                   icon: const Icon(Icons.history),
+                   label: const Text('VER REGISTRO DE MOVIMIENTOS'),
+                   style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                ),
               ],
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error al cargar ventas: $err')),
+        loading: () => const ShimmerList(itemCount: 5),
+        error: (err, stack) => EmptyState(icon: Icons.error_outline, title: 'Error', message: err.toString()),
       ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, String subtitle) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+        Text(subtitle, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+      ],
     );
   }
 
   void _confirmCloseRegister(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('¿Cerrar Caja?'),
-          content: const Text('Al cerrar la caja se generará y subirá el Reporte Z a Google Drive. Esta acción consolida las ventas del día.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ref.read(reportsProvider.notifier).generateAndCloseRegister();
-              },
-              child: const Text('Sí, Cerrar Caja'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => AlertDialog(
+        title: const Text('Cierre de Caja'),
+        content: const Text('¿Estás seguro de cerrar la caja? Se generará el Reporte Z PDF y se reiniciarán las métricas diarias.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ref.read(reportsProvider.notifier).generateAndCloseRegister();
+            },
+            child: const Text('Confirmar Cierre'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -148,34 +158,31 @@ class _MetricCard extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _MetricCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
+  const _MetricCard({required this.title, required this.value, required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: color.withOpacity(0.2),
-              radius: 30,
-              child: Icon(icon, size: 32, color: color),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, size: 28, color: color),
             ),
-            const SizedBox(width: 20),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontSize: 16, color: Colors.grey)),
-                Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-              ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: color)),
+                ],
+              ),
             )
           ],
         ),

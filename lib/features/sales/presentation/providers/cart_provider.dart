@@ -44,11 +44,11 @@ class CartNotifier extends Notifier<List<SaleDetail>> {
   }
 
   // Reducir o eliminar cantidad
-  void removeProduct(String productId) {
+  void removeProduct(String productId, {bool removeAll = false}) {
     final existingIndex = state.indexWhere((item) => item.productId == productId);
     if (existingIndex >= 0) {
       final currentItem = state[existingIndex];
-      if (currentItem.quantity > 1) {
+      if (currentItem.quantity > 1 && !removeAll) {
         state = [
           ...state.sublist(0, existingIndex),
           SaleDetail(
@@ -60,7 +60,7 @@ class CartNotifier extends Notifier<List<SaleDetail>> {
           ...state.sublist(existingIndex + 1),
         ];
       } else {
-        // Eliminar del todo si la cantidad llega a 0
+        // Eliminar del todo si la cantidad llega a 0 o se pide borrar todo
         state = state.where((item) => item.productId != productId).toList();
       }
     }

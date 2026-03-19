@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:inventary/core/widgets/shimmer_loading.dart';
+import 'package:inventary/core/widgets/empty_state.dart';
+import 'package:inventary/core/widgets/custom_snackbar.dart';
 import '../../domain/movement.dart';
 import '../providers/movements_provider.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
@@ -17,45 +20,48 @@ class _MovementsScreenState extends ConsumerState<MovementsScreen> {
     final movementsAsync = ref.watch(movementsProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reportes de Movimientos'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => ref.read(movementsProvider.notifier).refresh(),
-          ),
-        ],
-      ),
       body: movementsAsync.when(
         data: (movements) {
           if (movements.isEmpty) {
-            return const Center(
-              child: Text('No hay movimientos registrados.', style: TextStyle(fontSize: 18, color: Colors.grey)),
+            return EmptyState(
+              icon: Icons.swap_horiz_outlined,
+              title: 'Sin movimientos',
+              message: 'Aquí aparecerán tus ingresos y egresos de caja manuales.',
+              onAction: () => _showAddMovementDialog(context, ref),
+              actionLabel: 'Nuevo Movimiento',
             );
           }
-          return ListView.builder(
-            itemCount: movements.length,
+          final reversedList = movements.reversed.toList();
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: reversedList.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
-              final m = movements.reversed.toList()[index];
+              final m = reversedList[index];
               final isIncome = m.type == 'Ingreso';
               return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey[200]!)),
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+                    backgroundColor: isIncome ? Colors.green[50] : Colors.red[50],
                     child: Icon(
                       isIncome ? Icons.arrow_downward : Icons.arrow_upward,
-                      color: isIncome ? Colors.green : Colors.red,
+                      color: isIncome ? Colors.green[700] : Colors.red[700],
+                      size: 20,
                     ),
                   ),
                   title: Text(m.description, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('${m.date.toString().substring(0, 16)} - ${m.type}'),
+                  subtitle: Text('${m.date.toString().substring(0, 16)} • ${m.type}', style: const TextStyle(fontSize: 12)),
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('\$${m.amountUSD.toStringAsFixed(2)}', style: TextStyle(color: isIncome ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
-                      Text('Bs. ${m.amountVES.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      Text(
+                        '${isIncome ? "+" : "-"}\$${m.amountUSD.toStringAsFixed(2)}',
+                        style: TextStyle(color: isIncome ? Colors.green[700] : Colors.red[700], fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      Text('Bs. ${m.amountVES.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                     ],
                   ),
                 ),
@@ -63,13 +69,13 @@ class _MovementsScreenState extends ConsumerState<MovementsScreen> {
             },
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        loading: () => const ShimmerList(itemCount: 10),
+        error: (err, stack) => EmptyState(icon: Icons.error_outline, title: 'Error', message: err.toString()),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddMovementDialog(context, ref),
-        label: const Text('Nuevo Movimiento'),
-        icon: const Icon(Icons.add),
+        label: const Text('Registrar Movimiento', style: TextStyle(color: Colors.white)),
+        icon: const Icon(Icons.add, color: Colors.white),
         backgroundColor: Colors.teal,
       ),
     );
@@ -82,92 +88,79 @@ class _MovementsScreenState extends ConsumerState<MovementsScreen> {
 
     showDialog(
       context: screenContext,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (stateCtx, setStateDialog) {
-            return AlertDialog(
-              title: const Text('Registrar Movimiento'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      value: type,
-                      items: const [
-                        DropdownMenuItem(value: 'Ingreso', child: Text('Ingreso')),
-                        DropdownMenuItem(value: 'Egreso', child: Text('Egreso (Pago, Deuda)')),
-                      ],
-                      onChanged: (val) => setStateDialog(() => type = val!),
-                      decoration: const InputDecoration(labelText: 'Tipo de Movimiento'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: descController,
-                      decoration: const InputDecoration(labelText: 'Concepto (Ej. Pago de Luz)'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: amountController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Monto en USD', prefixText: '\$'),
-                    ),
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (stateCtx, setStateDialog) => AlertDialog(
+          title: const Text('Nuevo Movimiento'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'Ingreso', label: Text('Ingreso'), icon: Icon(Icons.add)),
+                    ButtonSegment(value: 'Egreso', label: Text('Egreso'), icon: Icon(Icons.remove)),
                   ],
+                  selected: {type},
+                  onSelectionChanged: (val) => setStateDialog(() => type = val.first),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(stateCtx),
-                  child: const Text('Cancelar'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(labelText: 'Descripción / Concepto', border: OutlineInputBorder()),
+                  autofocus: true,
                 ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final desc = descController.text.trim();
-                    final amountUSD = double.tryParse(amountController.text) ?? 0.0;
-                    
-                    if (desc.isEmpty || amountUSD <= 0) {
-                      ScaffoldMessenger.of(stateCtx).showSnackBar(const SnackBar(content: Text('Revisa los campos ingresados.')));
-                      return;
-                    }
-
-                    final rate = ref.read(exchangeRateProvider).value?.rate ?? 36.0;
-                    final amountVES = amountUSD * rate;
-
-                    final movement = Movement(
-                      id: 'MOV-${DateTime.now().millisecondsSinceEpoch}',
-                      date: DateTime.now(),
-                      type: type,
-                      description: desc,
-                      amountUSD: amountUSD,
-                      amountVES: amountVES,
-                    );
-
-                    Navigator.pop(stateCtx); // Cierra diálogo
-                    
-                    // Mostrar carga en todo el scaffold
-                    showDialog(
-                      context: screenContext, 
-                      barrierDismissible: false, 
-                      builder: (_) => const Center(child: CircularProgressIndicator())
-                    );
-                    
-                    final success = await ref.read(movementsProvider.notifier).addMovement(movement);
-                    
-                    if (screenContext.mounted) {
-                      Navigator.pop(screenContext); // Quita carga
-                      if (success) {
-                        ScaffoldMessenger.of(screenContext).showSnackBar(const SnackBar(content: Text('Movimiento registrado.'), backgroundColor: Colors.green));
-                      } else {
-                        ScaffoldMessenger.of(screenContext).showSnackBar(const SnackBar(content: Text('Fallo al guardar. Verifique su conexión.'), backgroundColor: Colors.red));
-                      }
-                    }
-                  },
-                  child: const Text('Guardar'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: amountController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Monto USD', prefixText: '\$', border: OutlineInputBorder()),
                 ),
               ],
-            );
-          }
-        );
-      },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(stateCtx), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: () async {
+                final desc = descController.text.trim();
+                final amountUSD = double.tryParse(amountController.text) ?? 0.0;
+                
+                if (desc.isEmpty || amountUSD <= 0) {
+                  CustomSnackBar.error(stateCtx, 'Completa todos los campos correctamente.');
+                  return;
+                }
+
+                final rate = ref.read(exchangeRateProvider).value?.rate ?? 36.0;
+
+                final movement = Movement(
+                  id: 'MOV-${DateTime.now().millisecondsSinceEpoch}',
+                  date: DateTime.now(),
+                  type: type,
+                  description: desc,
+                  amountUSD: amountUSD,
+                  amountVES: amountUSD * rate,
+                );
+
+                Navigator.pop(stateCtx); // Close dialog
+                
+                showDialog(context: screenContext, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+                
+                final success = await ref.read(movementsProvider.notifier).addMovement(movement);
+                
+                if (screenContext.mounted) {
+                  Navigator.pop(screenContext); // Close loading
+                  if (success) {
+                    CustomSnackBar.success(screenContext, 'Movimiento registrado correctamente.');
+                  } else {
+                    CustomSnackBar.error(screenContext, 'Error al guardar el movimiento.');
+                  }
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

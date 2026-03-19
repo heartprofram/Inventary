@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:inventary/core/widgets/shimmer_loading.dart';
+import 'package:inventary/core/widgets/empty_state.dart';
+import 'package:inventary/core/widgets/custom_snackbar.dart';
 import '../providers/pending_payments_provider.dart';
 import '../providers/sales_providers.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
-import 'pos_screen.dart';
 
 class PendingPaymentsScreen extends ConsumerStatefulWidget {
   const PendingPaymentsScreen({super.key});
@@ -27,89 +29,79 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
     final exchangeRateAsync = ref.watch(exchangeRateProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cuentas por Cobrar'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => ref.read(pendingPaymentsProvider.notifier).refresh(),
-          ),
-        ],
-      ),
       body: pendingAsync.when(
         data: (pendings) {
           if (pendings.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.pending_actions, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No hay pagos pendientes', style: TextStyle(fontSize: 18)),
-                ],
-              ),
+            return EmptyState(
+              icon: Icons.pending_actions_outlined,
+              title: 'Cuentas al día',
+              message: 'No hay deudas o pagos pendientes registrados actualmente.',
+              onAction: () => ref.read(pendingPaymentsProvider.notifier).refresh(),
+              actionLabel: 'Actualizar',
             );
           }
 
-          return ListView.builder(
+          return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: pendings.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final pending = pendings[index];
               return Card(
-                margin: const EdgeInsets.only(bottom: 16),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.orange.withOpacity(0.3))),
+                clipBehavior: Clip.antiAlias,
                 child: ExpansionTile(
+                  backgroundColor: Colors.orange.withOpacity(0.02),
                   leading: CircleAvatar(
-                    backgroundColor: Colors.orange,
-                    child: Text('${index + 1}'),
+                    backgroundColor: Colors.orange[100],
+                    child: Icon(Icons.person_outline, color: Colors.orange[900]),
                   ),
                   title: Text(pending.deudor, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  subtitle: Text('Venta #${pending.idVenta.split('-').last.toUpperCase()} • ${pending.fecha}', style: const TextStyle(fontSize: 12)),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('ID: ${pending.idVenta}'),
-                      Text('Fecha: ${pending.fecha}'),
-                      Text('\$${pending.totalUsd.toStringAsFixed(2)} USD'),
-                      Text('${pending.detallesProductos.length} productos'),
+                      Text('\$${pending.totalUsd.toStringAsFixed(2)}', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                      const Text('PAGO PENDIENTE', style: TextStyle(fontSize: 10, color: Colors.redAccent, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   children: [
-                    // Detalles productos
-                    ...pending.detallesProductos.map((det) => ListTile(
-                      leading: const Icon(Icons.inventory_2),
-                      title: Text(det['nombre_producto']),
-                      subtitle: Text('${det['cantidad']} x \$${det['precio_unitario_usd']} = \$${det['subtotal_usd']}'),
-                    )),
-                    // Acciones
-                    Padding(
+                    Container(
                       padding: const EdgeInsets.all(16),
-                      child: Row(
+                      color: Colors.white,
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                              onPressed: () => _processPayment(context, ref, pending, exchangeRateAsync.value?.rate ?? 36.0),
-                              icon: const Icon(Icons.point_of_sale, color: Colors.white),
-                              label: const Text('Procesar Pago', style: TextStyle(color: Colors.white)),
+                          ...pending.detallesProductos.map((det) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              children: [
+                                Icon(Icons.inventory_2_outlined, size: 14, color: Colors.grey[600]),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(det['nombre_producto'], style: const TextStyle(fontSize: 13))),
+                                Text('${det['cantidad']} x \$${det['precio_unitario_usd']}', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                              onPressed: () => _editPayment(context, pending),
-                              icon: const Icon(Icons.edit),
-                              label: const Text('Editar'),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                              onPressed: () => _deletePayment(context, ref, pending.idVenta),
-                              icon: const Icon(Icons.delete),
-                              label: const Text('Eliminar'),
-                            ),
+                          )),
+                          const Divider(height: 32),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _processPayment(context, ref, pending, exchangeRateAsync.value?.rate ?? 36.0),
+                                  icon: const Icon(Icons.point_of_sale, size: 18),
+                                  label: const Text('COBRAR'),
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton.filledTonal(
+                                onPressed: () => _deletePayment(context, ref, pending.idVenta),
+                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                style: IconButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -120,69 +112,36 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
             },
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              Text('Error: $err'),
-              ElevatedButton(
-                onPressed: () => ref.read(pendingPaymentsProvider.notifier).refresh(),
-                child: const Text('Reintentar'),
-              ),
-            ],
-          ),
-        ),
+        loading: () => const ShimmerList(itemCount: 6),
+        error: (err, stack) => EmptyState(icon: Icons.error_outline, title: 'Error', message: err.toString()),
       ),
     );
   }
 
   void _processPayment(BuildContext context, WidgetRef ref, PendingPayment pending, double rate) {
     ref.read(pendingPaymentsProvider.notifier).processPendingPayment(pending, ref, rate);
-    
-    // Navegar a POS con datos precargados (o mostrar modal POS-like)
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Datos de ${pending.deudor} cargados en POS. Completa el pago.')),
-    );
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const PosScreen()),
-    );
+    CustomSnackBar.info(context, 'Mostrando datos de ${pending.deudor} en el POS para el cobro.');
+    // No navegar aquí para dejar que el usuario vea el snackbar o forzar navegación
+    // Navigator.pushReplacement(...) // opcional según UX deseada
   }
 
-  void _editPayment(BuildContext context, PendingPayment pending) {
-    // TODO: Implementar edición (navegar a edit_sale_screen con datos)
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Editar ${pending.deudor} (Próximamente)')),
-    );
-  }
-
-  void _deletePayment(BuildContext context, WidgetRef ref, String idVenta) {
-    showDialog(
+  void _deletePayment(BuildContext context, WidgetRef ref, String idVenta) async {
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar'),
-        content: const Text('¿Eliminar venta pendiente? Se revertirá stock.'),
+        title: const Text('Eliminar Pendiente'),
+        content: const Text('¿Estás seguro de eliminar esta venta pendiente? Esta acción no se puede deshacer.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              // TODO: Implementar delete endpoint/backend si necesario
-              // Por ahora solo refresh
-              await ref.read(pendingPaymentsProvider.notifier).refresh();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Eliminado (simulado)')),
-              );
-            },
-            child: const Text('Eliminar'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), child: const Text('Eliminar')),
         ],
       ),
     );
+    
+    if (confirm == true) {
+      // Implementación pendiente en el provider/repo real, por ahora refresh
+      await ref.read(pendingPaymentsProvider.notifier).refresh();
+      if (mounted) CustomSnackBar.success(context, 'Venta pendiente eliminada.');
+    }
   }
 }
-

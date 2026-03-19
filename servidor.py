@@ -305,6 +305,14 @@ class PosHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    print(f"\nIniciando Servidor POS. Escuchando peticiones...\n")
+    url = f"http://localhost:{PORT}"
+    print(f"\n[SERVIDOR] Iniciando Sistema POS...")
+    print(f"[SERVIDOR] URL: {url}")
+    print(f"[SERVIDOR] Carpeta Web: {WEB_DIR}")
+    print(f"\nEscuchando peticiones...\n")
+    
+    # Abrir el navegador predeterminado automáticamente tras un pequeño delay
+    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+    
     server = ThreadingHTTPServer(('0.0.0.0', PORT), PosHandler)
     server.serve_forever()

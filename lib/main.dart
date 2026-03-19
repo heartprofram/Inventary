@@ -13,7 +13,6 @@ import 'package:inventary/features/sales/presentation/screens/pending_payments_s
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Inicializamos GoogleApiService (se ajustará automáticamente según la plataforma)
   final googleApi = GoogleApiService();
   await googleApi.init();
   
@@ -37,6 +36,7 @@ class PosApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
+        fontFamily: 'Roboto', // Opcional, asegurar que se vea moderno
       ),
       debugShowCheckedModeBanner: false,
       home: const MainScreen(),
@@ -44,26 +44,17 @@ class PosApp extends StatelessWidget {
   }
 }
 
-class MainScreen extends StatelessWidget {
+class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const _MainContent();
-  }
+  State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainContent extends StatefulWidget {
-  const _MainContent();
-
-  @override
-  State<_MainContent> createState() => _MainContentState();
-}
-
-class _MainContentState extends State<_MainContent> {
+class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 1;
 
-  static const List<Widget> _pages = <Widget>[
+  final List<Widget> _pages = const [
     InventoryScreen(),
     PosScreen(),
     ReportsScreen(),
@@ -73,7 +64,7 @@ class _MainContentState extends State<_MainContent> {
     SettingsScreen(),
   ];
 
-  static const List<String> _titles = [
+  final List<String> _titles = const [
     'Inventario',
     'Ventas (POS)',
     'Cierre de Caja',
@@ -83,92 +74,126 @@ class _MainContentState extends State<_MainContent> {
     'Configuración'
   ];
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-    Navigator.pop(context); 
-  }
+  final List<IconData> _icons = const [
+    Icons.inventory,
+    Icons.shopping_cart,
+    Icons.analytics,
+    Icons.receipt_long,
+    Icons.pending_actions,
+    Icons.list_alt,
+    Icons.settings,
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_titles[_selectedIndex]),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.teal,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isWide = constraints.maxWidth >= 900;
+        
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(_titles[_selectedIndex]),
+            backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+            elevation: 0,
+            leading: isWide ? const Icon(Icons.point_of_sale, color: Colors.teal) : null,
+          ),
+          drawer: isWide ? null : _buildDrawer(),
+          body: Row(
+            children: [
+              if (isWide)
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: (int index) {
+                    setState(() {
+                      _selectedIndex = index;
+                    });
+                  },
+                  labelType: NavigationRailLabelType.all,
+                  selectedLabelTextStyle: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
+                  unselectedLabelTextStyle: const TextStyle(color: Colors.grey),
+                  selectedIconTheme: const IconThemeData(color: Colors.teal),
+                  destinations: List.generate(_titles.length, (index) {
+                    return NavigationRailDestination(
+                      icon: Icon(_icons[index]),
+                      selectedIcon: Icon(_icons[index], color: Colors.teal),
+                      label: Text(_titles[index]),
+                    );
+                  }),
+                ),
+              if (isWide) const VerticalDivider(thickness: 1, width: 1),
+              Expanded(
+                child: _pages[_selectedIndex],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(Icons.point_of_sale, size: 48, color: Colors.white),
-                  SizedBox(height: 8),
-                  Text(
-                    'Sistema POS',
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      child: Column(
+        children: [
+          DrawerHeader(
+            decoration: const BoxDecoration(
+              color: Colors.teal,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Icon(Icons.point_of_sale, size: 48, color: Colors.white),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    'Sistema POS\nInventario',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 24,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.inventory),
-              title: const Text('Inventario'),
-              selected: _selectedIndex == 0,
-              onTap: () => _onItemTapped(0),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: _titles.length,
+              itemBuilder: (context, index) {
+                if (index == 6) return Column(
+                  children: [
+                    const Divider(),
+                    _buildDrawerItem(index),
+                  ],
+                );
+                return _buildDrawerItem(index);
+              },
             ),
-            ListTile(
-              leading: const Icon(Icons.shopping_cart),
-              title: const Text('Ventas (POS)'),
-              selected: _selectedIndex == 1,
-              onTap: () => _onItemTapped(1),
-            ),
-            ListTile(
-              leading: const Icon(Icons.analytics),
-              title: const Text('Cierre de Caja'),
-              selected: _selectedIndex == 2,
-              onTap: () => _onItemTapped(2),
-            ),
-            ListTile(
-              leading: const Icon(Icons.receipt_long),
-              title: const Text('Historial Ventas'),
-              selected: _selectedIndex == 3,
-              onTap: () => _onItemTapped(3),
-            ),
-            ListTile(
-              leading: const Icon(Icons.list_alt),
-              title: const Text('Movimientos'),
-              selected: _selectedIndex == 5,
-              onTap: () => _onItemTapped(5),
-            ),
-            ListTile(
-              leading: const Icon(Icons.pending_actions),
-              title: const Text('Cuentas por Cobrar'),
-              selected: _selectedIndex == 4,
-              onTap: () => _onItemTapped(4),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Configuración'),
-              selected: _selectedIndex == 6,
-              onTap: () => _onItemTapped(6),
-            ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDrawerItem(int index) {
+    return ListTile(
+      leading: Icon(_icons[index], color: _selectedIndex == index ? Colors.teal : Colors.grey),
+      title: Text(
+        _titles[index],
+        style: TextStyle(
+          color: _selectedIndex == index ? Colors.teal : Colors.black87,
+          fontWeight: _selectedIndex == index ? FontWeight.bold : FontWeight.normal,
         ),
       ),
-      body: _pages[_selectedIndex],
+      selected: _selectedIndex == index,
+      onTap: () {
+        setState(() {
+          _selectedIndex = index;
+        });
+        Navigator.pop(context);
+      },
     );
   }
 }
