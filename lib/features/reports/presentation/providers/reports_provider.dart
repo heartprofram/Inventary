@@ -1,0 +1,92 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/reports_repository.dart';
+import '../../../sales/domain/sale.dart';
+import 'package:printing/printing.dart';
+import '../../../../core/utils/pdf_invoice_generator.dart';
+import '../../../../core/providers/core_providers.dart';
+
+// Proveedor Global para el Repositorio de Reportes
+final reportsRepositoryProvider = Provider((ref) {
+  final googleApi = ref.watch(googleApiServiceProvider);
+  return ReportsRepository(googleApi: googleApi);
+});
+
+// Estructura de métricas diarias
+class DailyReportMetrics {
+  final List<Sale> sales;
+  final double totalUSD;
+  final double totalVES;
+  final bool isClosed;
+
+  DailyReportMetrics({
+    required this.sales,
+    required this.totalUSD,
+    required this.totalVES,
+    this.isClosed = false,
+  });
+}
+
+// Notificador para extraer la data
+class ReportsNotifier extends AsyncNotifier<DailyReportMetrics> {
+  @override
+  Future<DailyReportMetrics> build() async {
+    return _fetchTodayMetrics();
+  }
+
+  Future<DailyReportMetrics> _fetchTodayMetrics() async {
+    final repo = ref.read(reportsRepositoryProvider);
+    final sales = await repo.getDailySales();
+
+    final totalUSD = sales.fold(0.0, (sum, sale) => sum + sale.totalUSD);
+    final totalVES = sales.fold(0.0, (sum, sale) => sum + sale.totalVES);
+
+    return DailyReportMetrics(sales: sales, totalUSD: totalUSD, totalVES: totalVES);
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncValue.loading();
+    try {
+      final metrics = await _fetchTodayMetrics();
+      state = AsyncValue.data(metrics);
+    } catch (e) {
+      state = AsyncValue.error(e, StackTrace.current);
+    }
+  }
+
+  Future<void> generateAndCloseRegister() async {
+    final currentMetrics = state.value;
+    if (currentMetrics == null || currentMetrics.sales.isEmpty) return;
+
+    state = const AsyncValue.loading();
+
+    try {
+      // 1. Generar Reporte PDF (Bytes)
+      final pdfBytes = await PdfInvoiceGenerator.generateZReport(
+        currentMetrics.sales,
+        currentMetrics.totalUSD,
+        currentMetrics.totalVES,
+      );
+
+      // 2. Descargar/Mostrar el PDF de Cierre en el navegador
+      await Printing.sharePdf(
+        bytes: pdfBytes, 
+        filename: 'ReporteZ_${DateTime.now().toIso8601String().split("T")[0]}.pdf'
+      );
+
+      // 3. (Opcional) Limpiar variables del estado
+      state = AsyncValue.data(DailyReportMetrics(
+        sales: currentMetrics.sales,
+        totalUSD: currentMetrics.totalUSD,
+        totalVES: currentMetrics.totalVES,
+        isClosed: true,
+      ));
+
+    } catch (e) {
+      state = AsyncValue.error(e, StackTrace.current);
+    }
+  }
+}
+
+final reportsProvider = AsyncNotifierProvider<ReportsNotifier, DailyReportMetrics>(() {
+  return ReportsNotifier();
+});
