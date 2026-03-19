@@ -1,152 +1,117 @@
+# 🛒 Sistema de Inventario y POS (Flutter + Google Sheets)
 
-# Inventario & POS - Sistema de Inventario y Punto de Venta
+Un sistema de Punto de Venta (POS) y control de inventario construido con **Flutter**. Este proyecto utiliza **Google Sheets como base de datos gratuita en la nube** y cuenta con una arquitectura híbrida de código único (Single Codebase) que le permite ejecutarse de forma nativa en dispositivos Android y a través de un navegador Web de forma segura.
 
-## Descripción General
+## ✨ Características Principales
 
-Este proyecto es un sistema completo de Punto de Venta (POS) e inventario diseñado para ser utilizado tanto en dispositivos Android como en la web. La aplicación está construida con Flutter y utiliza un backend de Python para la versión web, con Google Sheets como base de datos.
+* **Control de Inventario:** Creación, lectura y actualización de productos, control de stock y códigos de barras.
+* **Punto de Venta (POS):** Carrito de compras, cálculo de totales en USD y Moneda Local (VES con tasa BCV automatizada), múltiples métodos de pago.
+* **Cuentas por Cobrar:** Gestión de ventas a crédito y pagos parciales o totales.
+* **Movimientos de Caja:** Registro de ingresos y egresos adicionales.
+* **Reportes y Cierres (Reporte Z):** Generación y exportación de recibos y cierres de caja diarios en formato PDF.
+* **Arquitectura Híbrida:**
+  * **Android:** Conexión directa y segura a la API de Google Sheets (`googleapis_auth`).
+  * **Web:** Conexión a través de un servidor proxy local en Python (`servidor.py`) usando `Dio` para evadir restricciones de CORS y evitar la exposición de llaves privadas en el navegador.
 
-## Características Principales
+---
 
-- **Gestión de Inventario:** Permite agregar, editar y eliminar productos, así como controlar el stock en tiempo real.
-- **Punto de Venta (POS):** Facilita la creación de ventas de forma rápida y sencilla.
-- **Historial de Ventas:** Mantiene un registro detallado de todas las ventas realizadas, permitiendo filtrar y buscar por fecha.
-- **Movimientos de Inventario:** Registra todos los movimientos de entrada y salida de productos, proporcionando un seguimiento completo.
-- **Cierre de Caja:** Genera reportes de cierre de caja para conciliar las ventas del día.
-- **Sincronización con Google Sheets:** Utiliza una hoja de cálculo de Google como base de datos, lo que permite una gestión de datos centralizada y accesible.
-- **Multiplataforma:** Funciona tanto en Android (a través de un APK) como en la web (a través de un navegador).
+## 🚀 Requisitos Previos
 
-## Arquitectura del Software
+* [Flutter SDK](https://docs.flutter.dev/get-started/install) (versión 3.10 o superior recomendada).
+* [Python 3.x](https://www.python.org/downloads/) (Solo necesario para ejecutar la versión Web).
+* Librerías de Python: `pip install google-auth google-auth-httplib2 google-api-python-client flask-cors`
 
-El proyecto sigue una arquitectura de software limpia y modular, separando las responsabilidades en diferentes capas y módulos.
+---
 
-- **Capa de Presentación (Flutter):**
-  - **Framework:** Flutter
-  - **Gestión de Estado:** `flutter_riverpod` para un manejo de estado reactivo y eficiente.
-  - **UI:** Widgets de Material Design para una interfaz de usuario moderna y atractiva.
+## 🛠️ Configuración de la Base de Datos (Google Sheets)
 
-- **Capa de Lógica de Negocio (Backend - Python):**
-  - **Servidor:** `servidor.py` actúa como un servidor HTTP que sirve la aplicación web de Flutter.
-  - **API Proxy:** El backend funciona como un proxy que se comunica con la API de Google Sheets, proporcionando una capa de seguridad y abstracción.
-  - **Comunicación:** La aplicación Flutter se comunica con el backend a través de una API RESTful.
+La aplicación utiliza un documento de Google Sheets para almacenar toda la información.
 
-- **Capa de Datos (Google Sheets):**
-  - **Base de Datos:** Una hoja de cálculo de Google Sheets se utiliza como base de datos para almacenar productos, ventas y movimientos.
-  - **Interacción:** El backend de Python interactúa con la hoja de cálculo utilizando la API de Google Sheets.
+1. Crea un nuevo documento en [Google Sheets](https://docs.google.com/spreadsheets/).
+2. Copia el **ID de la hoja de cálculo** que aparece en la URL de tu navegador. 
+   *(Ejemplo: `https://docs.google.com/spreadsheets/d/AQUI_ESTA_EL_ID/edit`)*
+3. Abre el código del proyecto y pega este ID en dos lugares:
+   * En `lib/core/constants/app_constants.dart` (`spreadSheetId`).
+   * En `servidor.py` (`SPREADSHEET_ID = 'TU_ID_AQUI'`).
+4. **Las pestañas (hojas) se crearán automáticamente:** Al iniciar el servidor Python por primera vez, este detectará si el documento está vacío y creará automáticamente las pestañas necesarias (`Productos`, `Ventas`, `Movimientos`, `DetalleVentas`) con sus respectivos encabezados.
 
-## Estructura de Archivos
+---
 
-El proyecto está organizado en una estructura de carpetas clara y concisa:
+## 🔑 Obtención de Credenciales (API Keys)
 
+Para que la aplicación pueda leer y escribir en tu Google Sheet, necesitas una "Cuenta de Servicio" (Service Account) de Google Cloud.
+
+### Paso 1: Habilitar la API
+1. Ve a la [Consola de Google Cloud](https://console.cloud.google.com/).
+2. Crea un **Nuevo Proyecto**.
+3. En el menú lateral, ve a **API y Servicios** > **Biblioteca**.
+4. Busca **"Google Sheets API"** y haz clic en **Habilitar**.
+
+### Paso 2: Crear la Cuenta de Servicio
+1. Ve a **API y Servicios** > **Credenciales**.
+2. Haz clic en **+ CREAR CREDENCIALES** y selecciona **Cuenta de servicio**.
+3. Ponle un nombre (ej. `pos-inventario`) y haz clic en "Crear y Continuar", luego en "Listo".
+4. En la lista de Cuentas de servicio, verás un correo electrónico generado (ej. `pos-inventario@tu-proyecto.iam.gserviceaccount.com`). **Copia este correo.**
+
+### Paso 3: Descargar la Llave JSON
+1. Haz clic sobre el correo de la cuenta de servicio que acabas de crear.
+2. Ve a la pestaña **Claves** (Keys).
+3. Haz clic en **Agregar clave** > **Crear clave nueva**.
+4. Selecciona el formato **JSON** y haz clic en "Crear". 
+5. Se descargará un archivo en tu computadora. Renómbralo a **`credentials.json`**.
+6. Mueve este archivo dentro de la carpeta `assets/` de tu proyecto Flutter.
+
+### Paso 4: Dar acceso a la Hoja de Cálculo
+1. Ve a tu documento de Google Sheets.
+2. Haz clic en el botón **Compartir** (esquina superior derecha).
+3. Pega el **correo de la cuenta de servicio** (el que copiaste en el Paso 2).
+4. Otórgale permisos de **Editor** y haz clic en Enviar.
+
+---
+
+## 🛡️ Seguridad Importante (`.gitignore`)
+
+El archivo `credentials.json` contiene llaves privadas que **NUNCA** deben ser subidas a repositorios públicos como GitHub.
+Asegúrate de que tu archivo `.gitignore` incluya la siguiente línea antes de hacer un commit:
+
+```text
+# Credenciales privadas de Google
+assets/credentials.json
 ```
-├── android/          # Código nativo de Android
-├── assets/           # Archivos de credenciales y otros recursos
-├── build/            # Archivos de compilación
-├── lib/
-│   ├── core/         # Funcionalidades compartidas
-│   │   ├── constants/
-│   │   ├── error/
-│   │   ├── network/
-│   │   ├── providers/
-│   │   ├── services/ # Servicios (ej. Google API Service)
-│   │   └── utils/
-│   ├── features/     # Módulos de la aplicación
-│   │   ├── inventory/
-│   │   ├── reports/
-│   │   ├── sales/
-│   │   └── settings/
-│   └── main.dart     # Punto de entrada de la aplicación
-├── servidor.py       # Backend de Python para la versión web
-├── pubspec.yaml      # Dependencias y configuración del proyecto
-└── README.md         # Este archivo
-```
+(Se ha provisto un archivo `credentials.example.json` en el repositorio para ilustrar la estructura esperada de la llave).
 
-## Módulos de la Aplicación
+---
 
-La aplicación está dividida en los siguientes módulos:
+## 💻 Ejecución del Proyecto
 
-- **Inventario (`/lib/features/inventory`):**
-  - **`presentation/screens/inventory_screen.dart`:** Pantalla para gestionar el inventario de productos.
+### Para Android (Nativo)
+La versión móvil no requiere el servidor Python, se conecta directamente a Google Sheets.
 
-- **Ventas (`/lib/features/sales`):**
-  - **`presentation/screens/pos_screen.dart`:** Pantalla principal del Punto de Venta.
-  - **`presentation/screens/sales_history_screen.dart`:** Pantalla para ver el historial de ventas.
-
-- **Reportes (`/lib/features/reports`):**
-  - **`presentation/screens/reports_screen.dart`:** Pantalla para generar reportes.
-  - **`presentation/screens/movements_screen.dart`:** Pantalla para ver los movimientos de inventario.
-
-- **Configuración (`/lib/features/settings`):**
-  - **`presentation/screens/settings_screen.dart`:** Pantalla para configurar la aplicación.
-
-## Backend (`servidor.py`)
-
-El backend de Python es responsable de:
-
-- Servir la aplicación web de Flutter.
-- Actuar como un proxy seguro para la API de Google Sheets.
-- Exponer una API RESTful para que la aplicación Flutter pueda interactuar con los datos.
-- Obtener la tasa de cambio del dólar desde una API externa para la versión web.
-
-### Endpoints de la API
-
-- `GET /api/productos`: Obtiene la lista de productos.
-- `POST /api/productos`: Agrega un nuevo producto.
-- `PUT /api/productos/stock`: Actualiza el stock de un producto.
-- `PUT /api/productos/update`: Actualiza los datos de un producto.
-- `GET /api/ventas`: Obtiene el historial de ventas.
-- `POST /api/ventas`: Agrega una nueva venta.
-- `GET /api/movimientos`: Obtiene los movimientos de inventario.
-- `POST /api/movimientos`: Agrega un nuevo movimiento.
-- `GET /api/detalle_ventas`: Obtiene los detalles de las ventas.
-- `POST /api/detalle_ventas`: Agrega detalles de una venta.
-- `GET /api/tasa`: Obtiene la tasa de cambio del dólar.
-
-## Cómo Ejecutar la Aplicación
-
-### Versión Web
-
-1. **Instalar dependencias de Python:**
-   ```bash
-   pip install google-auth google-auth-httplib2 google-api-python-client
-   ```
-2. **Construir la aplicación web de Flutter:**
-   ```bash
-   flutter build web
-   ```
-3. **Ejecutar el servidor de Python:**
-   ```bash
-   python servidor.py
-   ```
-4. **Abrir la aplicación en el navegador:**
-   [http://localhost:8081](http://localhost:8081)
-
-### Versión Android
-
-1. **Conectar un dispositivo Android o iniciar un emulador.**
-2. **Ejecutar la aplicación:**
+1. Conecta tu dispositivo o inicia un emulador.
+2. Ejecuta la aplicación:
    ```bash
    flutter run
    ```
-   También se puede generar un APK para instalar en el dispositivo:
+3. Para compilar el instalador final:
    ```bash
-   flutter build apk
+   flutter build apk --release
    ```
 
-## Dependencias del Proyecto
+### Para Web (Navegador)
+Debido a las políticas de seguridad web (CORS), la versión web requiere el servidor proxy local.
 
-### Flutter (`pubspec.yaml`)
-- `flutter_riverpod`: Gestión de estado.
-- `http`, `dio`: Peticiones HTTP.
-- `googleapis`, `googleapis_auth`, `google_sign_in`: Integración con Google API.
-- `pdf`, `printing`: Generación e impresión de PDFs.
-- `shared_preferences`: Almacenamiento local simple.
-- `url_launcher`: Abrir URLs.
-- `open_filex`: Abrir archivos.
-- `intl`: Internacionalización.
+1. Abre una terminal y enciende el servidor:
+   ```bash
+   python servidor.py
+   ```
+2. Abre otra terminal y ejecuta el cliente Flutter:
+   ```bash
+   flutter run -d chrome
+   ```
 
-### Python (`servidor.py`)
-- `google-auth`
-- `google-auth-httplib2`
-- `google-api-python-client`
+---
 
-**Nota:** Este `README.md` ha sido generado automáticamente y resume la estructura y funcionalidades del proyecto.
+## 📄 Licencia
+Este proyecto está bajo la Licencia MIT. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+
+Copyright (c) 2026 Edwin Medina
