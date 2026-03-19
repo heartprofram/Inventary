@@ -2,10 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/movement.dart';
 import '../../../../core/providers/core_providers.dart';
 
-final movementRepositoryProvider = Provider<MovementRepository>((ref) {
-  final googleApi = ref.watch(googleApiServiceProvider);
-  return MovementRepository(googleApi: googleApi);
-});
+// El repository provider ahora se encuentra en core_providers.dart
 
 class MovementsNotifier extends AsyncNotifier<List<Movement>> {
   @override
@@ -16,7 +13,6 @@ class MovementsNotifier extends AsyncNotifier<List<Movement>> {
   Future<bool> addMovement(Movement movement) async {
     try {
       await ref.read(movementRepositoryProvider).addMovement(movement);
-      // Recargar lista
       ref.invalidateSelf();
       return true;
     } catch (e) {

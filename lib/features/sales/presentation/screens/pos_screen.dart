@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:inventary/features/sales/presentation/providers/payment_provider.dart';
 import 'package:inventary/features/sales/domain/entities/payment.dart';
+import 'package:inventary/features/sales/domain/sale.dart' hide Payment; // <--- SE AGREGA 'hide Payment'
 import 'package:inventary/features/sales/presentation/providers/cart_provider.dart';
 import 'package:inventary/features/sales/presentation/providers/sales_providers.dart';
 import 'package:inventary/features/settings/presentation/providers/settings_provider.dart';

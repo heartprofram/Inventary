@@ -73,8 +73,8 @@ class ReportsScreen extends ConsumerWidget {
                     child: ListTile(
                       leading: const Icon(Icons.payment),
                       title: Text(entry.key),
-                      subtitle: Text('USD: \$${entry.value.toStringAsFixed(2)} | VES: Bs.${(entry.value * metrics.sales.isNotEmpty ? metrics.sales.first.exchangeRate : 36.0).toStringAsFixed(2)}'),
-                      trailing: Icon(Icons.arrow_forward_ios, size: 16),
+                      subtitle: Text('USD: \$${entry.value.toStringAsFixed(2)} | VES: Bs.${(entry.value * (metrics.sales.isNotEmpty ? metrics.sales.first.exchangeRate : 36.0)).toStringAsFixed(2)}'),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     ),
                   )),
                 ],

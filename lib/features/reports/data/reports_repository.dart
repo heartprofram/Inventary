@@ -1,43 +1,67 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:dio/dio.dart';
 import '../../../core/services/google_api_service.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../sales/domain/sale.dart';
+import '../../sales/domain/entities/payment.dart';
 
 class ReportsRepository {
+  final Dio dio;
   final GoogleApiService googleApi;
+  final String baseUrl = 'http://localhost:8081/api';
 
-  ReportsRepository({required this.googleApi});
+  ReportsRepository({required this.dio, required this.googleApi});
 
   Future<List<Sale>> getDailySales() async {
     final now = DateTime.now();
-    final todayStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
     try {
-      final response = await googleApi.sheetsApi.spreadsheets.values.get(
-        AppConstants.spreadSheetId,
-        'Ventas!A2:G',
-      );
-
-      final List<dynamic> rows = response.values ?? [];
+      List<dynamic> rows;
+      
+      if (kIsWeb) {
+        final response = await dio.get('$baseUrl/ventas');
+        rows = response.data ?? [];
+      } else {
+        final response = await googleApi.sheetsApi.spreadsheets.values.get(
+          AppConstants.spreadSheetId,
+          'Ventas!A2:H',
+        );
+        rows = response.values ?? [];
+      }
+      
       final List<Sale> dailySales = [];
 
       for (var row in rows) {
-        final rowList = row as List<dynamic>;
-        if (rowList.length >= 5) {
-          final dateStr = rowList[1].toString();
+        if (row.length >= 5) {
+          final dateStr = row[1].toString();
+          
+          // Solo tomar las ventas que coincidan con la fecha de hoy
           if (dateStr.startsWith(todayStr)) {
-            final paymentMethod = rowList.length > 6 ? rowList[6].toString() : '';
+            final totalUSD = double.tryParse(row[2].toString()) ?? 0.0;
+            
+            List<Payment> parsedPayments = [];
+            if (row.length >= 6 && row[5].toString().isNotEmpty) {
+               try {
+                 final List<dynamic> pmList = jsonDecode(row[5].toString());
+                 parsedPayments = pmList.map((p) => Payment(method: p['method'], amount: (p['amount'] as num).toDouble())).toList();
+               } catch(e) {
+                 parsedPayments = [Payment(method: row[5].toString(), amount: totalUSD)];
+               }
+            } else {
+               parsedPayments = [Payment(method: 'Efectivo', amount: totalUSD)];
+            }
+
             final sale = Sale(
-              id: rowList[0].toString(),
+              id: row[0].toString(),
               date: DateTime.parse(dateStr),
-              exchangeRate: double.tryParse(rowList[4].toString()) ?? 0.0,
-              details: [],
-              paymentMethod: paymentMethod.isNotEmpty
-                  ? paymentMethod
-                  : PaymentMethods.efectivoUsd,
+              exchangeRate: double.tryParse(row[4].toString()) ?? 0.0,
+              details: [], // El reporte diario no necesita el detalle completo de los productos
+              payments: parsedPayments,
             )..overrideTotals(
-                double.tryParse(rowList[2].toString()) ?? 0.0,
-                double.tryParse(rowList[3].toString()) ?? 0.0,
+                totalUSD,
+                double.tryParse(row[3].toString()) ?? 0.0,
               );
             dailySales.add(sale);
           }

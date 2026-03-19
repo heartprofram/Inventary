@@ -1,12 +1,12 @@
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
-import '../../../core/providers/core_providers.dart';
-import '../../domain/sale.dart';
-import '../providers/sales_providers.dart';
-import '../providers/cart_provider.dart';
-import '../providers/payment_provider.dart';
-import '../../../../core/constants/app_constants.dart';
+import 'package:dio/dio.dart'; // <--- IMPORTACIÓN DIRECTA DE DIO
+import 'package:inventary/features/sales/domain/sale.dart';
+import 'package:inventary/features/sales/presentation/providers/cart_provider.dart';
+import 'package:inventary/features/sales/presentation/providers/payment_provider.dart';
+import 'package:inventary/features/sales/domain/entities/payment.dart';
+
+// Creamos un proveedor local de Dio para no depender de core_providers
+final dioProvider = Provider((ref) => Dio());
 
 class PendingPayment {
   final String idVenta;
@@ -42,7 +42,6 @@ class PendingPayment {
   }
 }
 
-// Provider para lista de pagos pendientes
 final pendingPaymentsProvider = AsyncNotifierProvider<PendingPaymentsNotifier, List<PendingPayment>>(
   PendingPaymentsNotifier.new,
 );
@@ -59,7 +58,7 @@ class PendingPaymentsNotifier extends AsyncNotifier<List<PendingPayment>> {
   }
 
   Future<List<PendingPayment>> _fetchPending() async {
-    final dio = ref.read(dioProvider);
+    final dio = ref.read(dioProvider); // Ahora leerá nuestro proveedor local
     final response = await dio.get('http://localhost:8081/api/ventas/pendientes');
     final List<dynamic> data = response.data;
     
@@ -73,39 +72,25 @@ class PendingPaymentsNotifier extends AsyncNotifier<List<PendingPayment>> {
   }
 
   Future<void> processPendingPayment(PendingPayment pending, WidgetRef ref, double currentRate) async {
-    // Cargar en carrito y pagos
     final sale = pending.toSale(currentRate);
     
-    // Limpiar carrito actual
     ref.read(cartProvider.notifier).clear();
     ref.read(paymentsProvider.notifier).clearPayments();
     
-    // Recargar productos del pendiente
     for (var detail in sale.details) {
       ref.read(cartProvider.notifier).addProductByDetail(detail);
     }
     
-    // Configurar deudor para referencia
     ref.read(debtorNameProvider.notifier).state = pending.deudor;
   }
 
   Future<void> updatePendingStatus(String idVenta, List<Payment> payments) async {
-    final dio = ref.read(dioProvider);
+    final dio = ref.read(dioProvider); // Ahora leerá nuestro proveedor local
     await dio.put('http://localhost:8081/api/ventas/update_status', data: {
       'id_venta': idVenta,
       'metodos_pago': payments.map((p) => p.toJson()).toList(),
     });
     
-    // Refresh lista
     await refresh();
   }
 }
-
-// Extension para addProductByDetail en cart_provider (se añadirá después)
-extension CartNotifierExt on CartNotifier {
-  void addProductByDetail(SaleDetail detail) {
-    // Implementar lógica para agregar por detalle (simplificado)
-    // Esto requerirá lookup del product completo normalmente
-  }
-}
-

@@ -119,7 +119,7 @@ class PdfInvoiceGenerator {
                 ]
               ),
               pw.SizedBox(height: 20),
-              pw.Center(child: pw.Text('PAGO PENDIENTE', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: Colors.orange))),
+              pw.Center(child: pw.Text('PAGO PENDIENTE', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.orange))),
             ],
           );
         },
@@ -188,4 +188,3 @@ class PdfInvoiceGenerator {
     return pdf.save();
   }
 }
-

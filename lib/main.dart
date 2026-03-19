@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:inventary/core/providers/core_providers.dart';
+import 'package:inventary/core/services/google_api_service.dart';
 import 'package:inventary/features/inventory/presentation/screens/inventory_screen.dart';
 import 'package:inventary/features/sales/presentation/screens/pos_screen.dart';
 import 'package:inventary/features/settings/presentation/screens/settings_screen.dart';
@@ -7,15 +9,14 @@ import 'package:inventary/features/reports/presentation/screens/reports_screen.d
 import 'package:inventary/features/reports/presentation/screens/movements_screen.dart';
 import 'package:inventary/features/sales/presentation/screens/sales_history_screen.dart';
 import 'package:inventary/features/sales/presentation/screens/pending_payments_screen.dart';
-import 'package:inventary/core/services/google_api_service.dart';
-import 'package:inventary/core/providers/core_providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Inicializamos GoogleApiService (se ajustará automáticamente según la plataforma)
   final googleApi = GoogleApiService();
   await googleApi.init();
-
+  
   runApp(
     ProviderScope(
       overrides: [
@@ -62,13 +63,12 @@ class _MainContent extends StatefulWidget {
 class _MainContentState extends State<_MainContent> {
   int _selectedIndex = 1;
 
-  // Pantallas placeholder de nuestros módulos de Clean Architecture correspondientes
   static const List<Widget> _pages = <Widget>[
     InventoryScreen(),
     PosScreen(),
     ReportsScreen(),
     SalesHistoryScreen(),
-    const PendingPaymentsScreen(),
+    PendingPaymentsScreen(),
     MovementsScreen(),
     SettingsScreen(),
   ];
@@ -87,7 +87,7 @@ class _MainContentState extends State<_MainContent> {
     setState(() {
       _selectedIndex = index;
     });
-    Navigator.pop(context); // Cierra el Drawer tras la selección
+    Navigator.pop(context); 
   }
 
   @override
@@ -158,12 +158,12 @@ class _MainContentState extends State<_MainContent> {
               selected: _selectedIndex == 4,
               onTap: () => _onItemTapped(4),
             ),
-            const Divider(), // Separador visual
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.settings),
               title: const Text('Configuración'),
-              selected: _selectedIndex == 5,
-              onTap: () => _onItemTapped(5),
+              selected: _selectedIndex == 6,
+              onTap: () => _onItemTapped(6),
             ),
           ],
         ),

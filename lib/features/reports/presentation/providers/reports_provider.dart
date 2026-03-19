@@ -1,23 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/reports_repository.dart';
-import '../../../sales/domain/sale.dart';
 import 'package:printing/printing.dart';
+import '../../../sales/domain/sale.dart';
 import '../../../../core/utils/pdf_invoice_generator.dart';
 import '../../../../core/providers/core_providers.dart';
 
-// Proveedor Global para el Repositorio de Reportes
-final reportsRepositoryProvider = Provider((ref) {
-  final googleApi = ref.watch(googleApiServiceProvider);
-  return ReportsRepository(googleApi: googleApi);
-});
+// El repository provider ahora se encuentra en core_providers.dart
 
 // Estructura de métricas diarias
 class DailyReportMetrics {
   final List<Sale> sales;
   final double totalUSD;
   final double totalVES;
-  final Map<String, double> paymentsUSD; // Desglose por método USD
-  final Map<String, double> paymentsVES; // Desglose por método VES
+  final Map<String, double> paymentsUSD; 
+  final Map<String, double> paymentsVES; 
   final bool isClosed;
 
   DailyReportMetrics({
@@ -88,20 +83,17 @@ class ReportsNotifier extends AsyncNotifier<DailyReportMetrics> {
     state = const AsyncValue.loading();
 
     try {
-      // 1. Generar Reporte PDF (Bytes)
       final pdfBytes = await PdfInvoiceGenerator.generateZReport(
         currentMetrics.sales,
         currentMetrics.totalUSD,
         currentMetrics.totalVES,
       );
 
-      // 2. Descargar/Mostrar el PDF de Cierre en el navegador
       await Printing.sharePdf(
         bytes: pdfBytes, 
         filename: 'ReporteZ_${DateTime.now().toIso8601String().split("T")[0]}.pdf'
       );
 
-      // 3. (Opcional) Limpiar variables del estado
       state = AsyncValue.data(DailyReportMetrics(
         sales: currentMetrics.sales,
         totalUSD: currentMetrics.totalUSD,

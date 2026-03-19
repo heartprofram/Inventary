@@ -1,98 +1,175 @@
-import '../../../core/services/google_api_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:dio/dio.dart';
 import 'package:googleapis/sheets/v4.dart' as sheets;
+import '../../../core/services/google_api_service.dart';
 import '../../../core/constants/app_constants.dart';
 import '../domain/product.dart';
 
 class ProductRepository {
+  final Dio dio;
   final GoogleApiService googleApi;
+  final String baseUrl = 'http://localhost:8081/api';
 
-  ProductRepository({required this.googleApi});
+  ProductRepository({required this.dio, required this.googleApi});
 
-  // Leer todos los productos del servidor proxy
   Future<List<Product>> getProducts() async {
     try {
-      final response = await googleApi.sheetsApi.spreadsheets.values.get(
-        AppConstants.spreadSheetId,
-        'Productos!A2:G',
-      );
-      final rows = response.values ?? [];
-      return rows.map((row) => _fromRow(row)).toList();
+      List<dynamic> rows;
+      
+      if (kIsWeb) {
+        final response = await dio.get('$baseUrl/productos');
+        rows = response.data ?? [];
+      } else {
+        final response = await googleApi.sheetsApi.spreadsheets.values.get(
+          AppConstants.spreadSheetId,
+          'Productos!A2:G',
+        );
+        rows = response.values ?? [];
+      }
+      
+      return rows.where((row) => row.length >= 6).map((row) {
+        return Product(
+          id: row[0].toString(),
+          name: row[1].toString(),
+          description: row.length > 2 ? row[2].toString() : '',
+          costPriceUSD: double.tryParse(row[3].toString().replaceAll(',', '.')) ?? 0.0,
+          salePriceUSD: double.tryParse(row[4].toString().replaceAll(',', '.')) ?? 0.0,
+          stockQuantity: int.tryParse(row[5].toString()) ?? 0,
+          barCode: row.length > 6 ? row[6].toString() : '',
+        );
+      }).toList();
     } catch (e) {
       throw Exception('Error al obtener productos: $e');
     }
   }
 
-  // Agregar un producto
   Future<void> addProduct(Product product) async {
     try {
-      final valueRange = sheets.ValueRange(values: [_toRow(product)]);
-      await googleApi.sheetsApi.spreadsheets.values.append(
-        valueRange,
-        AppConstants.spreadSheetId,
-        'Productos!A:G',
-        valueInputOption: 'USER_ENTERED',
-      );
+      final row = [
+        product.id,
+        product.name,
+        product.description,
+        product.costPriceUSD,
+        product.salePriceUSD,
+        product.stockQuantity,
+        product.barCode,
+      ];
+
+      if (kIsWeb) {
+        await dio.post('$baseUrl/productos', data: {'row': row});
+      } else {
+        final valueRange = sheets.ValueRange(values: [row]);
+        await googleApi.sheetsApi.spreadsheets.values.append(
+          valueRange,
+          AppConstants.spreadSheetId,
+          'Productos!A:G',
+          valueInputOption: 'USER_ENTERED',
+        );
+      }
     } catch (e) {
-      throw Exception('Error al guardar el producto: $e');
+      throw Exception('Error al agregar producto: $e');
     }
   }
 
-  // Actualizar stock de un producto
   Future<void> updateStock(String productId, int newStock) async {
     try {
-      // 1. Obtener todas las filas para encontrar el índice
-      final response = await googleApi.sheetsApi.spreadsheets.values.get(
-        AppConstants.spreadSheetId,
-        'Productos!A2:G',
-      );
-      final rows = response.values ?? [];
-
-      int rowIndex = -1;
-      for (int i = 0; i < rows.length; i++) {
-        final row = rows[i];
-        if (row.isNotEmpty && row[0].toString() == productId) {
-          rowIndex = i + 2; // +2: fila 1 es header, base 1 de Sheets
-          break;
+      if (kIsWeb) {
+        // En Web, el servidor Python ya maneja la búsqueda de fila
+        final productsResp = await dio.get('$baseUrl/productos');
+        final rows = productsResp.data as List<dynamic>;
+        int rowIndex = -1;
+        for (int i = 0; i < rows.length; i++) {
+          if (rows[i].isNotEmpty && rows[i][0].toString() == productId) {
+              rowIndex = i + 2; 
+              break;
+          }
+        }
+        if (rowIndex != -1) {
+            await dio.put('$baseUrl/productos/stock', data: {
+                'range': 'Productos!F$rowIndex',
+                'value': newStock
+            });
+        }
+      } else {
+        // En Nativo, debemos buscar la fila localmente
+        final response = await googleApi.sheetsApi.spreadsheets.values.get(
+          AppConstants.spreadSheetId,
+          'Productos!A2:A', // Solo necesitamos la columna de IDs
+        );
+        final rows = response.values ?? [];
+        int rowIndex = -1;
+        for (int i = 0; i < rows.length; i++) {
+          if (rows[i].isNotEmpty && rows[i][0].toString() == productId) {
+            rowIndex = i + 2;
+            break;
+          }
+        }
+        
+        if (rowIndex != -1) {
+          final valueRange = sheets.ValueRange(values: [[newStock]]);
+          await googleApi.sheetsApi.spreadsheets.values.update(
+            valueRange,
+            AppConstants.spreadSheetId,
+            'Productos!F$rowIndex',
+            valueInputOption: 'USER_ENTERED',
+          );
         }
       }
-
-      if (rowIndex == -1) {
-        throw Exception('Producto no encontrado');
-      }
-
-      // 2. Actualizar sólo la celda del Stock (columna F)
-      final updateRange = sheets.ValueRange(values: [[newStock]]);
-      await googleApi.sheetsApi.spreadsheets.values.update(
-        updateRange,
-        AppConstants.spreadSheetId,
-        'Productos!F$rowIndex',
-        valueInputOption: 'USER_ENTERED',
-      );
     } catch (e) {
-      throw Exception('Error al actualizar el stock: $e');
+      throw Exception('Error al actualizar stock: $e');
     }
   }
+  
+  Future<void> updateProduct(Product product) async {
+    try {
+      final rowData = [
+        product.id, product.name, product.description,
+        product.costPriceUSD, product.salePriceUSD,
+        product.stockQuantity, product.barCode
+      ];
 
-  // Mappers
-  Product _fromRow(List<dynamic> row) {
-    String safeString(int i) => (row.length > i) ? row[i].toString() : '';
-    double safeDouble(int i) => (row.length > i) ? double.tryParse(row[i].toString().replaceAll(',', '')) ?? 0.0 : 0.0;
-    int safeInt(int i) => (row.length > i) ? int.tryParse(row[i].toString()) ?? 0 : 0;
+      if (kIsWeb) {
+        final productsResp = await dio.get('$baseUrl/productos');
+        final rows = productsResp.data as List<dynamic>;
+        int rowIndex = -1;
+        for (int i = 0; i < rows.length; i++) {
+          if (rows[i].isNotEmpty && rows[i][0].toString() == product.id) {
+              rowIndex = i + 2; 
+              break;
+          }
+        }
+        if (rowIndex != -1) {
+            await dio.put('$baseUrl/productos/update', data: {
+                'range': 'Productos!A$rowIndex:G$rowIndex',
+                'row': rowData
+            });
+        }
+      } else {
+        final response = await googleApi.sheetsApi.spreadsheets.values.get(
+          AppConstants.spreadSheetId,
+          'Productos!A2:A',
+        );
+        final rows = response.values ?? [];
+        int rowIndex = -1;
+        for (int i = 0; i < rows.length; i++) {
+          if (rows[i].isNotEmpty && rows[i][0].toString() == product.id) {
+            rowIndex = i + 2;
+            break;
+          }
+        }
 
-    return Product(
-      id: safeString(0),
-      name: safeString(1),
-      description: safeString(2),
-      costPriceUSD: safeDouble(3),
-      salePriceUSD: safeDouble(4),
-      stockQuantity: safeInt(5),
-      barCode: safeString(6),
-    );
+        if (rowIndex != -1) {
+          final valueRange = sheets.ValueRange(values: [rowData]);
+          await googleApi.sheetsApi.spreadsheets.values.update(
+            valueRange,
+            AppConstants.spreadSheetId,
+            'Productos!A$rowIndex:G$rowIndex',
+            valueInputOption: 'USER_ENTERED',
+          );
+        }
+      }
+    } catch (e) {
+      throw Exception('Error al actualizar producto: $e');
+    }
   }
-
-  List<Object?> _toRow(Product p) => [
-    p.id, p.name, p.description,
-    p.costPriceUSD, p.salePriceUSD,
-    p.stockQuantity, p.barCode,
-  ];
 }

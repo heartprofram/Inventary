@@ -1,3 +1,5 @@
+import 'entities/payment.dart';
+
 class SaleDetail {
   final String productId;
   final String productName;
@@ -14,7 +16,6 @@ class SaleDetail {
   double get subtotalUSD => quantity * unitPriceUSD;
 }
 
-// Métodos de pago disponibles
 class PaymentMethods {
   static const String efectivoUsd = 'efectivo_usd';
   static const String efectivoVes = 'efectivo_ves';
@@ -32,10 +33,8 @@ class PaymentMethods {
     pendiente: 'Pago Pendiente',
   };
 
-  String label(String method) => labels[method] ?? method;
+  static String label(String method) => labels[method] ?? method;
 }
-
-String get paymentMethodLabel => payments.isEmpty ? 'Efectivo' : payments.first.method;
 
 class Sale {
   final String id;
@@ -48,6 +47,8 @@ class Sale {
   double _totalUSDTmp = -1;
   double _totalVESTmp = -1;
 
+  String get paymentMethodLabel => payments.isEmpty ? 'Efectivo' : payments.first.method;
+
   Sale({
     required this.id,
     required this.date,
@@ -57,7 +58,6 @@ class Sale {
     this.debtorName,
   });
 
-  // Metodo para inyectar desde Repo
   void overrideTotals(double tUsd, double tVes) {
     _totalUSDTmp = tUsd;
     _totalVESTmp = tVes;
@@ -90,27 +90,5 @@ class Sale {
         'subtotal_usd': d.subtotalUSD,
       }).toList(),
     };
-  }
-}
-
-class Payment {
-  final String method;
-  final double amount;
-
-  Payment({
-    required this.method,
-    required this.amount,
-  });
-
-  Map<String, dynamic> toJson() => {
-    'method': method,
-    'amount': amount,
-  };
-
-  factory Payment.fromJson(Map<String, dynamic> json) {
-    return Payment(
-      method: json['method'],
-      amount: json['amount'],
-    );
   }
 }

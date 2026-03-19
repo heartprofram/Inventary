@@ -1,66 +1,100 @@
-import '../../../core/services/google_api_service.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:dio/dio.dart';
 import 'package:googleapis/sheets/v4.dart' as sheets;
+import '../../../core/services/google_api_service.dart';
 import '../../../core/constants/app_constants.dart';
 import '../domain/sale.dart';
+import '../domain/entities/payment.dart';
 import '../../inventory/data/product_repository.dart';
 
 class SalesRepository {
+  final Dio dio;
   final GoogleApiService googleApi;
   final ProductRepository productRepository;
+  final String baseUrl = 'http://localhost:8081/api';
 
-  SalesRepository({required this.googleApi, required this.productRepository});
+  SalesRepository({
+    required this.dio, 
+    required this.googleApi,
+    required this.productRepository,
+  });
 
   Future<void> processSale(Sale sale) async {
     try {
-      // 1. Guardar la venta en Google Sheets (hoja "Ventas")
-      final valueRange = sheets.ValueRange(
-        values: [[
-          sale.id,
-          sale.date.toIso8601String(),
-          sale.totalUSD,
-          sale.totalVES,
-          sale.exchangeRate,
-          'Local',
-          sale.paymentMethodLabel,
-        ]],
-      );
-
-      await googleApi.sheetsApi.spreadsheets.values.append(
-        valueRange,
-        AppConstants.spreadSheetId,
-        'Ventas!A:G',
-        valueInputOption: 'USER_ENTERED',
-      );
-
-      // 1.5 Guardar los detalles en DetalleVentas
+      // 1. Descontar inventario (el repositorio de productos ya maneja kIsWeb internamente)
       for (final detail in sale.details) {
-        final detailRange = sheets.ValueRange(
-          values: [[
-            sale.id,
-            detail.productId,
-            detail.productName,
-            detail.quantity,
-            detail.unitPriceUSD,
-            detail.subtotalUSD,
-          ]]
-        );
-        await googleApi.sheetsApi.spreadsheets.values.append(
-          detailRange,
-          AppConstants.spreadSheetId,
-          'DetalleVentas!A:F',
-          valueInputOption: 'USER_ENTERED',
-        );
-      }
-
-      // 2. Descontar inventario
-      final products = await productRepository.getProducts();
-      for (final detail in sale.details) {
+        final products = await productRepository.getProducts();
         final idx = products.indexWhere((p) => p.id == detail.productId);
         if (idx >= 0) {
           final currentStock = products[idx].stockQuantity;
           final newStock = (currentStock - detail.quantity).clamp(0, 999999);
           await productRepository.updateStock(detail.productId, newStock);
         }
+      }
+
+      // 2. Preparar los datos
+      final ventaRow = [
+        sale.id,
+        sale.date.toIso8601String(),
+        sale.totalUSD,
+        sale.totalVES,
+        sale.exchangeRate,
+        jsonEncode(sale.payments.map((p) => p.toJson()).toList()),
+        '', // pdf_url
+        sale.debtorName ?? ''
+      ];
+
+      final List<List<dynamic>> detallesRows = sale.details.map((d) => [
+        sale.id,
+        d.productId,
+        d.productName,
+        d.quantity,
+        d.unitPriceUSD,
+        d.subtotalUSD
+      ]).toList();
+
+      // 3. Enviar a Google Sheets
+      if (kIsWeb) {
+        final ventaData = {
+          'id_venta': sale.id,
+          'fecha': sale.date.toIso8601String(),
+          'total_usd': sale.totalUSD,
+          'total_ves': sale.totalVES,
+          'tasa_cambio': sale.exchangeRate,
+          'metodos_pago': sale.payments.map((p) => p.toJson()).toList(),
+          'pdf_url': '',
+          'detalles': sale.debtorName ?? ''
+        };
+
+        final detallesData = sale.details.map((d) => {
+          'id_producto': d.productId,
+          'nombre_producto': d.productName,
+          'cantidad': d.quantity,
+          'precio_unitario_usd': d.unitPriceUSD,
+          'subtotal_usd': d.subtotalUSD
+        }).toList();
+
+        await dio.post('$baseUrl/ventas', data: {
+          'venta': ventaData,
+          'detalles': detallesData,
+        });
+      } else {
+        // Guardar cabecera de la venta
+        await googleApi.sheetsApi.spreadsheets.values.append(
+          sheets.ValueRange(values: [ventaRow]),
+          AppConstants.spreadSheetId,
+          'Ventas!A:H',
+          valueInputOption: 'USER_ENTERED',
+        );
+
+        // Guardar detalles de la venta
+        await googleApi.sheetsApi.spreadsheets.values.append(
+          sheets.ValueRange(values: detallesRows),
+          AppConstants.spreadSheetId,
+          'DetalleVentas!A:F',
+          valueInputOption: 'USER_ENTERED',
+        );
       }
     } catch (e) {
       throw Exception('Error al procesar la venta: $e');
@@ -69,19 +103,26 @@ class SalesRepository {
 
   Future<List<Sale>> getSalesHistory() async {
     try {
-      // 1. Fetch Ventas
-      final ventasResp = await googleApi.sheetsApi.spreadsheets.values.get(
-        AppConstants.spreadSheetId,
-        'Ventas!A2:G',
-      );
-      final ventasRows = ventasResp.values ?? [];
+      List<dynamic> ventasRows;
+      List<dynamic> detallesRows;
 
-      // 2. Fetch DetalleVentas
-      final detallesResp = await googleApi.sheetsApi.spreadsheets.values.get(
-        AppConstants.spreadSheetId,
-        'DetalleVentas!A2:F',
-      );
-      final detallesRows = detallesResp.values ?? [];
+      if (kIsWeb) {
+        final ventasResp = await dio.get('$baseUrl/ventas');
+        final detallesResp = await dio.get('$baseUrl/detalle_ventas');
+        ventasRows = ventasResp.data ?? [];
+        detallesRows = detallesResp.data ?? [];
+      } else {
+        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(
+          AppConstants.spreadSheetId,
+          'Ventas!A2:H',
+        );
+        final dResp = await googleApi.sheetsApi.spreadsheets.values.get(
+          AppConstants.spreadSheetId,
+          'DetalleVentas!A2:F',
+        );
+        ventasRows = vResp.values ?? [];
+        detallesRows = dResp.values ?? [];
+      }
 
       final Map<String, List<SaleDetail>> detailsMap = {};
       for (var row in detallesRows) {
@@ -93,48 +134,53 @@ class SalesRepository {
             quantity: int.tryParse(row[3].toString()) ?? 0,
             unitPriceUSD: double.tryParse(row[4].toString().replaceAll(',', '.')) ?? 0.0,
           );
-          if (!detailsMap.containsKey(saleId)) {
-            detailsMap[saleId] = [];
-          }
-          detailsMap[saleId]!.add(detail);
+          detailsMap.putIfAbsent(saleId, () => []).add(detail);
         }
       }
 
-      final List<Sale> sales = [];
-      for (var row in ventasRows) {
-        // Asumiendo formato: ['ID Venta', 'Fecha', 'Total USD', 'Total VES', 'Tasa Cambio', 'PDF', 'Metodo de Pago']
-        if (row.length >= 5) {
-          final saleId = row[0].toString();
-          final dateStr = row[1].toString();
-          final totalUSD = double.tryParse(row[2].toString().replaceAll(',', '.')) ?? 0.0;
-          final totalVES = double.tryParse(row[3].toString().replaceAll(',', '.')) ?? 0.0;
-          final exchangeRate = double.tryParse(row[4].toString().replaceAll(',', '.')) ?? 1.0;
-          final paymentMethod = row.length >= 7 ? row[6].toString() : 'Efectivo'; // Default
-          
-          final details = detailsMap[saleId] ?? [];
-          
-          final sale = Sale(
-            id: saleId,
-            date: DateTime.tryParse(dateStr) ?? DateTime.now(),
-            exchangeRate: exchangeRate,
-            details: details,
-            paymentMethod: paymentMethod,
-          );
-          sale.overrideTotals(totalUSD, totalVES);
-          sales.add(sale);
+      final List<Sale> sales = ventasRows.where((row) => row.length >= 5).map((row) {
+        final saleId = row[0].toString();
+        final dateStr = row[1].toString();
+        final totalUSD = double.tryParse(row[2].toString().replaceAll(',', '.')) ?? 0.0;
+        final totalVES = double.tryParse(row[3].toString().replaceAll(',', '.')) ?? 0.0;
+        final exchangeRate = double.tryParse(row[4].toString().replaceAll(',', '.')) ?? 1.0;
+        
+        List<Payment> parsedPayments = [];
+        if (row.length >= 6 && row[5].toString().isNotEmpty) {
+           try {
+             final List<dynamic> pmList = jsonDecode(row[5].toString());
+             parsedPayments = pmList.map((p) => Payment(method: p['method'], amount: (p['amount'] as num).toDouble())).toList();
+           } catch(e) {
+             parsedPayments = [Payment(method: row[5].toString(), amount: totalUSD)];
+           }
+        } else {
+           parsedPayments = [Payment(method: 'Efectivo', amount: totalUSD)];
         }
-      }
+
+        final debtorName = row.length >= 8 ? row[7].toString() : null;
+        final details = detailsMap[saleId] ?? [];
+        
+        return Sale(
+          id: saleId,
+          date: DateTime.tryParse(dateStr) ?? DateTime.now(),
+          exchangeRate: exchangeRate,
+          details: details,
+          payments: parsedPayments,
+          debtorName: debtorName,
+        )..overrideTotals(totalUSD, totalVES);
+      }).toList();
+
       sales.sort((a, b) => b.date.compareTo(a.date));
       return sales;
     } catch (e) {
-      throw Exception('Error al obtener historial de ventas: $e');
+      throw Exception('Error al obtener el historial de ventas: $e');
     }
   }
 
   Future<void> updateSale(Sale oldSale, Sale newSale) async {
     try {
       await deleteSale(oldSale);
-      await processSale(newSale); // Se inserta como nueva pero mantiene su ID y Fecha, el sort() la ubicará bien.
+      await processSale(newSale); 
     } catch (e) {
       throw Exception('Error al actualizar la venta: $e');
     }
@@ -142,90 +188,73 @@ class SalesRepository {
 
   Future<void> deleteSale(Sale sale) async {
     try {
-      // 1. Devolver el stock de los productos vendidos
-      final products = await productRepository.getProducts();
+      // 1. Devolver el stock
       for (final detail in sale.details) {
+        final products = await productRepository.getProducts();
         final idx = products.indexWhere((p) => p.id == detail.productId);
         if (idx >= 0) {
           final currentStock = products[idx].stockQuantity;
-          final newStock = currentStock + detail.quantity; // Devolver al stock
+          final newStock = currentStock + detail.quantity; 
           await productRepository.updateStock(detail.productId, newStock);
         }
       }
 
-      // 2. Obtener los IDs de las hojas
-      final spreadsheet = await googleApi.sheetsApi.spreadsheets.get(AppConstants.spreadSheetId);
-      final ventasSheetId = spreadsheet.sheets?.firstWhere((s) => s.properties?.title == 'Ventas', orElse: () => sheets.Sheet()).properties?.sheetId;
-      final detalleVentasSheetId = spreadsheet.sheets?.firstWhere((s) => s.properties?.title == 'DetalleVentas', orElse: () => sheets.Sheet()).properties?.sheetId;
-
-      if (ventasSheetId == null || detalleVentasSheetId == null) {
-        throw Exception('No se encontraron las hojas Ventas o DetalleVentas');
-      }
-
-      // 3. Buscar índices en Ventas
-      final ventasResp = await googleApi.sheetsApi.spreadsheets.values.get(
-        AppConstants.spreadSheetId,
-        'Ventas!A:A',
-      );
-      final ventasRows = ventasResp.values ?? [];
-      int startIndexVenta = -1;
-      for (int i = 0; i < ventasRows.length; i++) {
-        if (ventasRows[i].isNotEmpty && ventasRows[i][0].toString() == sale.id) {
-          startIndexVenta = i;
-          break;
+      // 2. Borrar la venta
+      if (kIsWeb) {
+        await dio.delete('$baseUrl/ventas/${sale.id}');
+      } else {
+        // En nativo, el borrado de filas requiere batchUpdate con deleteDimension.
+        // Por simplicidad y siguiendo las reglas del usuario (append/update), 
+        // podríamos dejarla en blanco o intentar implementarla si es vital.
+        // Implementaremos una búsqueda y limpieza de fila para cumplir con la lógica híbrida.
+        
+        final meta = await googleApi.sheetsApi.spreadsheets.get(AppConstants.spreadSheetId);
+        final sheetVentas = meta.sheets?.firstWhere((s) => s.properties?.title == 'Ventas');
+        final sheetDetalles = meta.sheets?.firstWhere((s) => s.properties?.title == 'DetalleVentas');
+        
+        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A');
+        final dResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'DetalleVentas!A:A');
+        
+        final vRows = vResp.values ?? [];
+        final dRows = dResp.values ?? [];
+        
+        List<sheets.Request> requests = [];
+        
+        // Buscar índices en DetalleVentas (de abajo hacia arriba)
+        for (int i = dRows.length - 1; i >= 0; i--) {
+          if (dRows[i].isNotEmpty && dRows[i][0] == sale.id) {
+            requests.add(sheets.Request(deleteDimension: sheets.DeleteDimensionRequest(
+              range: sheets.DimensionRange(
+                sheetId: sheetDetalles?.properties?.sheetId,
+                dimension: 'ROWS',
+                startIndex: i,
+                endIndex: i + 1,
+              )
+            )));
+          }
+        }
+        
+        // Buscar índice en Ventas
+        for (int i = vRows.length - 1; i >= 0; i--) {
+          if (vRows[i].isNotEmpty && vRows[i][0] == sale.id) {
+            requests.add(sheets.Request(deleteDimension: sheets.DeleteDimensionRequest(
+              range: sheets.DimensionRange(
+                sheetId: sheetVentas?.properties?.sheetId,
+                dimension: 'ROWS',
+                startIndex: i,
+                endIndex: i + 1,
+              )
+            )));
+          }
+        }
+        
+        if (requests.isNotEmpty) {
+          await googleApi.sheetsApi.spreadsheets.batchUpdate(
+            sheets.BatchUpdateSpreadsheetRequest(requests: requests),
+            AppConstants.spreadSheetId,
+          );
         }
       }
-
-      // 4. Buscar índices en DetalleVentas
-      final detallesResp = await googleApi.sheetsApi.spreadsheets.values.get(
-        AppConstants.spreadSheetId,
-        'DetalleVentas!A:F',
-      );
-      final detallesRows = detallesResp.values ?? [];
-      
-      List<int> detailRowsIndices = [];
-      for (int i = 0; i < detallesRows.length; i++) {
-        if (detallesRows[i].isNotEmpty && detallesRows[i][0].toString() == sale.id) {
-          detailRowsIndices.add(i);
-        }
-      }
-
-      // 5. Preparar BatchUpdate para borrar las filas
-      detailRowsIndices.sort((a, b) => b.compareTo(a));
-
-      final requests = <sheets.Request>[];
-
-      for (int rowIndex in detailRowsIndices) {
-        requests.add(sheets.Request(
-          deleteDimension: sheets.DeleteDimensionRequest(
-            range: sheets.DimensionRange(
-              sheetId: detalleVentasSheetId,
-              dimension: 'ROWS',
-              startIndex: rowIndex,
-              endIndex: rowIndex + 1,
-            ),
-          ),
-        ));
-      }
-
-      if (startIndexVenta != -1) {
-        requests.add(sheets.Request(
-          deleteDimension: sheets.DeleteDimensionRequest(
-            range: sheets.DimensionRange(
-              sheetId: ventasSheetId,
-              dimension: 'ROWS',
-              startIndex: startIndexVenta,
-              endIndex: startIndexVenta + 1,
-            ),
-          ),
-        ));
-      }
-
-      if (requests.isNotEmpty) {
-        final batchUpdate = sheets.BatchUpdateSpreadsheetRequest(requests: requests);
-        await googleApi.sheetsApi.spreadsheets.batchUpdate(batchUpdate, AppConstants.spreadSheetId);
-      }
-
     } catch (e) {
       throw Exception('Error al eliminar la venta: $e');
     }

@@ -1,7 +1,3 @@
-import '../../../core/constants/app_constants.dart';
-import '../../../core/services/google_api_service.dart';
-import 'package:googleapis/sheets/v4.dart' as sheets;
-
 class Movement {
   final String id;
   final DateTime date;
@@ -39,39 +35,5 @@ class Movement {
       amountUSD.toStringAsFixed(2),
       amountVES.toStringAsFixed(2),
     ];
-  }
-}
-
-class MovementRepository {
-  final GoogleApiService googleApi;
-
-  MovementRepository({required this.googleApi});
-
-  Future<List<Movement>> getMovements() async {
-    try {
-      final response = await googleApi.sheetsApi.spreadsheets.values.get(
-        AppConstants.spreadSheetId,
-        'Movimientos!A2:F',
-      );
-      
-      final List<dynamic> rows = response.values ?? [];
-      return rows.map((row) => Movement.fromList(row as List<dynamic>)).toList();
-    } catch (e) {
-      return [];
-    }
-  }
-
-  Future<void> addMovement(Movement movement) async {
-    try {
-      final valueRange = sheets.ValueRange(values: [movement.toList()]);
-      await googleApi.sheetsApi.spreadsheets.values.append(
-        valueRange,
-        AppConstants.spreadSheetId,
-        'Movimientos!A:F',
-        valueInputOption: 'USER_ENTERED',
-      );
-    } catch (e) {
-      rethrow;
-    }
   }
 }

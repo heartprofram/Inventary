@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:inventary/features/sales/domain/entities/payment.dart';
 import '../../domain/sale.dart';
 import '../../../../core/providers/core_providers.dart';
 
@@ -18,7 +19,6 @@ class _EditSaleScreenState extends ConsumerState<EditSaleScreen> {
   @override
   void initState() {
     super.initState();
-    // Copy the details so we can mutate them
     _details = widget.sale.details.map((d) => SaleDetail(
       productId: d.productId,
       productName: d.productName,
@@ -26,7 +26,7 @@ class _EditSaleScreenState extends ConsumerState<EditSaleScreen> {
       unitPriceUSD: d.unitPriceUSD,
     )).toList();
     
-    _paymentMethod = widget.sale.paymentMethod;
+    _paymentMethod = widget.sale.payments.isNotEmpty ? widget.sale.payments.first.method : PaymentMethods.efectivoUsd;
   }
 
   double get _totalUSD => _details.fold(0.0, (sum, item) => sum + item.subtotalUSD);
@@ -60,7 +60,7 @@ class _EditSaleScreenState extends ConsumerState<EditSaleScreen> {
       date: widget.sale.date,
       exchangeRate: widget.sale.exchangeRate,
       details: _details,
-      paymentMethod: _paymentMethod,
+      payments: [Payment(method: _paymentMethod, amount: _totalUSD)],
     );
     newSale.overrideTotals(_totalUSD, _totalVES);
 
@@ -68,11 +68,11 @@ class _EditSaleScreenState extends ConsumerState<EditSaleScreen> {
     try {
       final repo = ref.read(salesRepositoryProvider);
       await repo.updateSale(widget.sale, newSale);
-      Navigator.pop(context); // loading
+      Navigator.pop(context); 
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Venta actualizada exitosamente')));
-      Navigator.pop(context, true); // Retorna true para refrescar la lista
+      Navigator.pop(context, true); 
     } catch (e) {
-      Navigator.pop(context); // loading
+      Navigator.pop(context); 
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
