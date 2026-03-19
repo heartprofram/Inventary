@@ -314,29 +314,121 @@ class PosScreen extends ConsumerWidget {
                 onChanged: (v) => ref.read(printInvoiceProvider.notifier).state = v ?? true,
                 activeColor: Colors.teal,
               ),
-              const Text('Recibo PDF', style: TextStyle(fontSize: 14)),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: isCartEmpty ? null : () => _showAddPaymentDialog(context, ref),
-                icon: const Icon(Icons.add_card),
-                label: const Text('Agregar Pago'),
+              const Text('Generar Recibo (PDF)', style: TextStyle(fontSize: 13, color: Colors.grey)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          
+          if (payments.isNotEmpty) ...[
+            TextButton.icon(
+              onPressed: () => ref.read(paymentsProvider.notifier).clearPayments(),
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Reiniciar pagos para cobro rápido'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: Colors.orange),
+            ),
+            const SizedBox(height: 8),
+          ],
+
+          // BOTONERA RÁPIDA
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 2.5,
+            children: [
+              _QuickPaymentButton(
+                label: 'EFECTIVO \$',
+                icon: Icons.attach_money,
+                color: Colors.green,
+                onPressed: isCartEmpty ? null : () => _processDirectPayment(context, ref, PaymentMethods.efectivoUsd),
+              ),
+              _QuickPaymentButton(
+                label: 'PAGO MÓVIL',
+                icon: Icons.phone_android,
+                color: Colors.blue,
+                onPressed: isCartEmpty ? null : () => _processDirectPayment(context, ref, PaymentMethods.pagoMovil),
+              ),
+              _QuickPaymentButton(
+                label: 'PUNTO',
+                icon: Icons.credit_card,
+                color: Colors.teal,
+                onPressed: isCartEmpty ? null : () => _processDirectPayment(context, ref, PaymentMethods.puntoDeVenta),
+              ),
+              _QuickPaymentButton(
+                label: 'FIADO (PEND.)',
+                icon: Icons.person_add_alt,
+                color: Colors.orange,
+                onPressed: isCartEmpty ? null : () => _showQuickDebtorDialog(context, ref),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          _QuickPaymentButton(
+            label: 'PAGO MIXTO / OTROS',
+            icon: Icons.payments_outlined,
+            color: Colors.blueGrey,
+            isFullWidth: true,
+            onPressed: isCartEmpty ? null : () => _showAddPaymentDialog(context, ref),
+          ),
+          
+          if (payments.isNotEmpty && totalPaid == totalUSD) ...[
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => _processCheckout(context, ref),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('CONFIRMAR VENTA FINAL', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _processDirectPayment(BuildContext context, WidgetRef ref, String method) async {
+    final totalUSD = ref.read(cartProvider.notifier).totalCartUSD;
+    ref.read(paymentsProvider.notifier).clearPayments();
+    ref.read(paymentsProvider.notifier).addPayment(Payment(method: method, amount: totalUSD));
+    await _processCheckout(context, ref);
+  }
+
+  void _showQuickDebtorDialog(BuildContext context, WidgetRef ref) {
+    String debtorName = '';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nombre del Deudor'),
+        content: TextField(
+          onChanged: (v) => debtorName = v,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Cliente',
+            hintText: 'Ej. Juan Pérez',
+            prefixIcon: Icon(Icons.person),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
           ElevatedButton(
-            onPressed: isCartEmpty || (totalPaid != totalUSD) ? null : () => _processCheckout(context, ref),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              elevation: 4,
-            ),
-            child: Text(
-              totalPaid < totalUSD ? 'FALTAN \$${(totalUSD - totalPaid).toStringAsFixed(2)}' : 'COBRAR \$${totalUSD.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+            onPressed: () {
+              if (debtorName.trim().isNotEmpty) {
+                final totalUSD = ref.read(cartProvider.notifier).totalCartUSD;
+                ref.read(debtorNameProvider.notifier).state = debtorName;
+                ref.read(paymentsProvider.notifier).clearPayments();
+                ref.read(paymentsProvider.notifier).addPayment(Payment(method: PaymentMethods.pendiente, amount: totalUSD));
+                Navigator.pop(context);
+                _processCheckout(context, ref);
+              } else {
+                CustomSnackBar.warning(context, 'El nombre es obligatorio para fiar.');
+              }
+            },
+            child: const Text('Registrar Deuda'),
           ),
         ],
       ),
@@ -403,83 +495,125 @@ class PosScreen extends ConsumerWidget {
   }
 
   void _showAddPaymentDialog(BuildContext context, WidgetRef ref) {
-    final amountController = TextEditingController();
-    // Sugerir el monto faltante
     final totalUSD = ref.read(cartProvider.notifier).totalCartUSD;
     final totalPaid = ref.read(paymentsProvider.notifier).totalPaid;
-    amountController.text = (totalUSD - totalPaid).toString();
-    
-    String selectedMethod = PaymentMethods.efectivoUsd;
+    final remainingUSD = totalUSD - totalPaid;
+
+    if (remainingUSD <= 0) return;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Registrar Pago'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: selectedMethod,
-              items: PaymentMethods.labels.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
-              onChanged: (v) => selectedMethod = v!,
-              decoration: const InputDecoration(labelText: 'Método'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Monto USD', prefixText: '\$'),
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () {
-              final amount = double.tryParse(amountController.text);
-              if (amount != null && amount > 0) {
-                if (selectedMethod == PaymentMethods.pendiente) {
-                  _showDebtorNameDialog(context, ref, amount);
-                } else {
-                  ref.read(paymentsProvider.notifier).addPayment(Payment(method: selectedMethod, amount: amount));
-                }
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('Agregar'),
-          ),
-        ],
-      ),
-    );
-  }
+      builder: (context) {
+        String? debtorName;
+        bool isPending = false;
 
-  void _showDebtorNameDialog(BuildContext context, WidgetRef ref, double amount) {
-    final debtorNameController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Datos del Deudor'),
-        content: TextField(
-          controller: debtorNameController,
-          decoration: const InputDecoration(labelText: 'Nombre Completo'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () {
-              final name = debtorNameController.text;
-              if (name.isNotEmpty) {
-                ref.read(debtorNameProvider.notifier).state = name;
-                ref.read(paymentsProvider.notifier).addPayment(Payment(method: PaymentMethods.pendiente, amount: amount));
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Método de Pago', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+              contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Monto a cobrar: \$${remainingUSD.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 18, color: Colors.teal, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 24),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _PaymentTypeButton(
+                        label: 'Efectivo \$',
+                        icon: Icons.attach_money,
+                        color: Colors.green,
+                        onTap: () {
+                          ref.read(paymentsProvider.notifier).addPayment(Payment(method: PaymentMethods.efectivoUsd, amount: remainingUSD));
+                          Navigator.pop(context);
+                        },
+                      ),
+                      _PaymentTypeButton(
+                        label: 'Pago Móvil',
+                        icon: Icons.phone_android,
+                        color: Colors.blue,
+                        onTap: () {
+                          ref.read(paymentsProvider.notifier).addPayment(Payment(method: PaymentMethods.pagoMovil, amount: remainingUSD));
+                          Navigator.pop(context);
+                        },
+                      ),
+                      _PaymentTypeButton(
+                        label: 'Punto',
+                        icon: Icons.credit_card,
+                        color: Colors.orange,
+                        onTap: () {
+                          ref.read(paymentsProvider.notifier).addPayment(Payment(method: PaymentMethods.puntoDeVenta, amount: remainingUSD));
+                          Navigator.pop(context);
+                        },
+                      ),
+                      _PaymentTypeButton(
+                        label: 'Pendiente',
+                        icon: Icons.person_add_alt,
+                        color: Colors.redAccent,
+                        isOutline: !isPending,
+                        onTap: () {
+                          setState(() {
+                            isPending = true;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  if (isPending) ...[
+                    const SizedBox(height: 20),
+                    TextField(
+                      onChanged: (v) => debtorName = v,
+                      decoration: InputDecoration(
+                        labelText: 'Nombre del Cliente (Deudor)',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(Icons.person),
+                        fillColor: Colors.red.withOpacity(0.05),
+                        filled: true,
+                      ),
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          if (debtorName != null && debtorName!.trim().isNotEmpty) {
+                            ref.read(debtorNameProvider.notifier).state = debtorName;
+                            ref.read(paymentsProvider.notifier).addPayment(
+                                  Payment(method: PaymentMethods.pendiente, amount: remainingUSD),
+                                );
+                            Navigator.pop(context);
+                          } else {
+                            CustomSnackBar.warning(context, 'El nombre del deudor es obligatorio.');
+                          }
+                        },
+                        child: const Text('Confirmar Deuda', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -508,6 +642,90 @@ class PosScreen extends ConsumerWidget {
             child: const Text('Guardar'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _QuickPaymentButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onPressed;
+  final bool isFullWidth;
+
+  const _QuickPaymentButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.onPressed,
+    this.isFullWidth = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: isFullWidth ? double.infinity : null,
+      height: 48,
+      child: FilledButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        label: Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+        ),
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentTypeButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final bool isOutline;
+
+  const _PaymentTypeButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    this.isOutline = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 130,
+      height: 90,
+      child: Material(
+        color: isOutline ? Colors.transparent : color.withOpacity(0.1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: color, width: isOutline ? 1 : 2),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 32),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

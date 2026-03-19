@@ -186,9 +186,44 @@ class SalesRepository {
     }
   }
 
+  Future<void> updateSaleStatus(String idVenta, List<Payment> payments) async {
+    try {
+      if (kIsWeb) {
+        await dio.put('$baseUrl/ventas/update_status', data: {
+          'id_venta': idVenta,
+          'metodos_pago': payments.map((p) => p.toJson()).toList(),
+        });
+      } else {
+        // Buscar fila por ID en Ventas (Col A) y actualizar Col F (Métodos de Pago)
+        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A');
+        final vRows = vResp.values ?? [];
+        
+        int rowIndex = -1;
+        for (int i = 0; i < vRows.length; i++) {
+          if (vRows[i].isNotEmpty && vRows[i][0].toString() == idVenta) {
+            rowIndex = i + 1; // 1-indexed para Sheets
+            break;
+          }
+        }
+
+        if (rowIndex != -1) {
+          final paymentsJson = jsonEncode(payments.map((p) => p.toJson()).toList());
+          await googleApi.sheetsApi.spreadsheets.values.update(
+            sheets.ValueRange(values: [[paymentsJson]]),
+            AppConstants.spreadSheetId,
+            'Ventas!F$rowIndex',
+            valueInputOption: 'USER_ENTERED',
+          );
+        }
+      }
+    } catch (e) {
+      throw Exception('Error al actualizar el estado de la venta: $e');
+    }
+  }
+
   Future<void> deleteSale(Sale sale) async {
     try {
-      // 1. Devolver el stock
+      // 1. Devolver el stock (Asegurando que sea antes de borrar)
       for (final detail in sale.details) {
         final products = await productRepository.getProducts();
         final idx = products.indexWhere((p) => p.id == detail.productId);
@@ -203,11 +238,6 @@ class SalesRepository {
       if (kIsWeb) {
         await dio.delete('$baseUrl/ventas/${sale.id}');
       } else {
-        // En nativo, el borrado de filas requiere batchUpdate con deleteDimension.
-        // Por simplicidad y siguiendo las reglas del usuario (append/update), 
-        // podríamos dejarla en blanco o intentar implementarla si es vital.
-        // Implementaremos una búsqueda y limpieza de fila para cumplir con la lógica híbrida.
-        
         final meta = await googleApi.sheetsApi.spreadsheets.get(AppConstants.spreadSheetId);
         final sheetVentas = meta.sheets?.firstWhere((s) => s.properties?.title == 'Ventas');
         final sheetDetalles = meta.sheets?.firstWhere((s) => s.properties?.title == 'DetalleVentas');
@@ -220,7 +250,7 @@ class SalesRepository {
         
         List<sheets.Request> requests = [];
         
-        // Buscar índices en DetalleVentas (de abajo hacia arriba)
+        // Buscar índices en DetalleVentas (de abajo hacia arriba para no alterar índices previos)
         for (int i = dRows.length - 1; i >= 0; i--) {
           if (dRows[i].isNotEmpty && dRows[i][0] == sale.id) {
             requests.add(sheets.Request(deleteDimension: sheets.DeleteDimensionRequest(

@@ -4,14 +4,15 @@ Un sistema de Punto de Venta (POS) y control de inventario construido con **Flut
 
 ## ✨ Características Principales
 
-* **Control de Inventario:** Creación, lectura y actualización de productos, control de stock y códigos de barras.
-* **Punto de Venta (POS):** Carrito de compras, cálculo de totales en USD y Moneda Local (VES con tasa BCV automatizada), múltiples métodos de pago.
-* **Cuentas por Cobrar:** Gestión de ventas a crédito y pagos parciales o totales.
-* **Movimientos de Caja:** Registro de ingresos y egresos adicionales.
-* **Reportes y Cierres (Reporte Z):** Generación y exportación de recibos y cierres de caja diarios en formato PDF.
+* **Control de Inventario:** Creación, lectura y actualización de productos, control de stock y escaneo de códigos de barras.
+* **Punto de Venta Optimizado (POS):** Carrito de compras con **botones de pago rápido** (Efectivo, Pago Móvil, Punto, Fiado) para ventas en un solo toque. Cálculo de totales en USD y Moneda Local (VES con tasa BCV).
+* **Cuentas por Cobrar Avanzadas:** Gestión de ventas a crédito, abonos y capacidad de **registrar deudas manuales del pasado** directamente desde el panel.
+* **Historial y Devoluciones:** Consulta detallada de ventas con opción de **editar ventas o procesar devoluciones de productos** mediante gestos (swipe).
+* **Reportes en PDF:** Exportación de facturas individuales y **Reportes de Ventas por períodos** (Hoy, Ayer, Semana, Mes, Global) en formato PDF profesional.
+* **Movimientos de Caja:** Registro de ingresos y egresos adicionales para cuadre exacto.
 * **Arquitectura Híbrida:**
   * **Android:** Conexión directa y segura a la API de Google Sheets (`googleapis_auth`).
-  * **Web:** Conexión a través de un servidor proxy local en Python (`servidor.py`) usando `Dio` para evadir restricciones de CORS y evitar la exposición de llaves privadas en el navegador.
+  * **Web:** Conexión a través de un servidor proxy local en Python (`servidor.py`) usando `Dio` para evadir restricciones de CORS.
 
 ---
 

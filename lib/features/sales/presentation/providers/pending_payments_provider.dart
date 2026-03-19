@@ -1,12 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart'; // <--- IMPORTACIÓN DIRECTA DE DIO
+import 'package:inventary/core/providers/core_providers.dart';
 import 'package:inventary/features/sales/domain/sale.dart';
 import 'package:inventary/features/sales/presentation/providers/cart_provider.dart';
 import 'package:inventary/features/sales/presentation/providers/payment_provider.dart';
 import 'package:inventary/features/sales/domain/entities/payment.dart';
-
-// Creamos un proveedor local de Dio para no depender de core_providers
-final dioProvider = Provider((ref) => Dio());
 
 class PendingPayment {
   final String idVenta;
@@ -58,16 +55,25 @@ class PendingPaymentsNotifier extends AsyncNotifier<List<PendingPayment>> {
   }
 
   Future<List<PendingPayment>> _fetchPending() async {
-    final dio = ref.read(dioProvider); // Ahora leerá nuestro proveedor local
-    final response = await dio.get('http://localhost:8081/api/ventas/pendientes');
-    final List<dynamic> data = response.data;
+    // Para simplificar, obtenemos el historial de ventas y filtramos las que tengan 'pendiente'
+    final salesRepo = ref.read(salesRepositoryProvider);
+    final allSales = await salesRepo.getSalesHistory();
     
-    return data.map((json) => PendingPayment(
-      idVenta: json['id_venta'],
-      fecha: json['fecha'],
-      totalUsd: (json['total_usd'] as num).toDouble(),
-      deudor: json['deudor'] ?? '',
-      detallesProductos: List<Map<String, dynamic>>.from(json['detalles_productos'] ?? []),
+    final pendingSales = allSales.where((sale) {
+      return sale.payments.any((p) => p.method == PaymentMethods.pendiente);
+    }).toList();
+
+    return pendingSales.map((sale) => PendingPayment(
+      idVenta: sale.id,
+      fecha: sale.date.toIso8601String(),
+      totalUsd: sale.totalUSD,
+      deudor: sale.debtorName ?? '',
+      detallesProductos: sale.details.map((d) => {
+        'id_producto': d.productId,
+        'nombre_producto': d.productName,
+        'cantidad': d.quantity,
+        'precio_unitario_usd': d.unitPriceUSD,
+      }).toList(),
     )).toList();
   }
 
@@ -85,12 +91,8 @@ class PendingPaymentsNotifier extends AsyncNotifier<List<PendingPayment>> {
   }
 
   Future<void> updatePendingStatus(String idVenta, List<Payment> payments) async {
-    final dio = ref.read(dioProvider); // Ahora leerá nuestro proveedor local
-    await dio.put('http://localhost:8081/api/ventas/update_status', data: {
-      'id_venta': idVenta,
-      'metodos_pago': payments.map((p) => p.toJson()).toList(),
-    });
-    
+    final salesRepo = ref.read(salesRepositoryProvider);
+    await salesRepo.updateSaleStatus(idVenta, payments);
     await refresh();
   }
 }
