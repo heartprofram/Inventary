@@ -1,16 +1,22 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:dio/dio.dart';
 import 'package:googleapis/sheets/v4.dart' as sheets;
 import '../../../core/services/google_api_service.dart';
+import '../../../core/services/local_storage_service.dart';
 import '../../../core/constants/app_constants.dart';
 import '../domain/movement.dart';
 
 class MovementRepository {
   final Dio dio;
   final GoogleApiService googleApi;
+  final LocalStorageService localStorageService;
   final String baseUrl = 'http://localhost:8081/api';
 
-  MovementRepository({required this.dio, required this.googleApi});
+  MovementRepository({
+    required this.dio,
+    required this.googleApi,
+    required this.localStorageService,
+  });
 
   Future<List<Movement>> getMovements() async {
     try {
@@ -63,8 +69,33 @@ class MovementRepository {
           valueInputOption: 'USER_ENTERED',
         );
       }
-    } catch (e) {
-      throw Exception('Error al agregar movimiento: $e');
+    } catch (networkError) {
+      // Fallo de red → guardar en cola offline
+      debugPrint('[MovementRepo] Error de red, guardando en modo offline: $networkError');
+      await localStorageService.addPendingMovement(movement.toMap());
+      // No relanzamos: el movimiento queda encolado para sincronizar luego.
+    }
+  }
+
+  /// Re-envía un movimiento encolado. Usado por SyncService.
+  Future<void> resyncMovement(Map<String, dynamic> movementMap) async {
+    final row = [
+      movementMap['id'],
+      movementMap['date'],
+      movementMap['type'],
+      movementMap['description'],
+      movementMap['amountUSD'],
+      movementMap['amountVES'],
+    ];
+    if (kIsWeb) {
+      await dio.post('$baseUrl/movimientos', data: {'row': row});
+    } else {
+      await googleApi.sheetsApi.spreadsheets.values.append(
+        sheets.ValueRange(values: [row]),
+        AppConstants.spreadSheetId,
+        'Movimientos!A:F',
+        valueInputOption: 'USER_ENTERED',
+      );
     }
   }
 }

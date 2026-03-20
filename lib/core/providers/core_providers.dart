@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../services/google_api_service.dart';
+import '../services/local_storage_service.dart';
 import '../../features/inventory/data/product_repository.dart';
 import '../../features/sales/data/sales_repository.dart';
 import '../../features/reports/data/reports_repository.dart';
@@ -16,6 +17,11 @@ final dioProvider = Provider<Dio>((ref) {
   return Dio();
 });
 
+// Servicio de Almacenamiento Local (Cola Offline)
+final localStorageServiceProvider = Provider<LocalStorageService>((ref) {
+  return LocalStorageService();
+});
+
 // Repositorio de Productos (Híbrido)
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
   final dio = ref.watch(dioProvider);
@@ -28,10 +34,12 @@ final salesRepositoryProvider = Provider<SalesRepository>((ref) {
   final productRepo = ref.watch(productRepositoryProvider);
   final dio = ref.watch(dioProvider);
   final googleApi = ref.watch(googleApiServiceProvider);
+  final localStorage = ref.watch(localStorageServiceProvider);
   return SalesRepository(
-    dio: dio, 
+    dio: dio,
     googleApi: googleApi,
     productRepository: productRepo,
+    localStorageService: localStorage,
   );
 });
 
@@ -46,5 +54,10 @@ final reportsRepositoryProvider = Provider<ReportsRepository>((ref) {
 final movementRepositoryProvider = Provider<MovementRepository>((ref) {
   final dio = ref.watch(dioProvider);
   final googleApi = ref.watch(googleApiServiceProvider);
-  return MovementRepository(dio: dio, googleApi: googleApi);
+  final localStorage = ref.watch(localStorageServiceProvider);
+  return MovementRepository(
+    dio: dio,
+    googleApi: googleApi,
+    localStorageService: localStorage,
+  );
 });

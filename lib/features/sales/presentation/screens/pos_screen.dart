@@ -11,7 +11,7 @@ import 'package:inventary/features/sales/presentation/providers/cart_provider.da
 import 'package:inventary/features/sales/presentation/providers/sales_providers.dart';
 import 'package:inventary/features/settings/presentation/providers/settings_provider.dart';
 
-final printInvoiceProvider = StateProvider<bool>((ref) => true);
+final printInvoiceProvider = StateProvider<bool>((ref) => false);
 
 class PosScreen extends ConsumerWidget {
   const PosScreen({super.key});

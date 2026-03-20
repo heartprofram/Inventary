@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:inventary/core/providers/core_providers.dart';
+import 'package:inventary/core/providers/sync_provider.dart';
 import 'package:inventary/core/services/google_api_service.dart';
 import 'package:inventary/features/inventory/presentation/screens/inventory_screen.dart';
 import 'package:inventary/features/sales/presentation/screens/pos_screen.dart';
@@ -16,11 +17,18 @@ void main() async {
   final googleApi = GoogleApiService();
   await googleApi.init();
   
+  final container = ProviderContainer(
+    overrides: [
+      googleApiServiceProvider.overrideWithValue(googleApi),
+    ],
+  );
+
+  // Iniciar servicio de sincronización offline en segundo plano
+  container.read(syncServiceProvider).start();
+  
   runApp(
-    ProviderScope(
-      overrides: [
-        googleApiServiceProvider.overrideWithValue(googleApi),
-      ],
+    UncontrolledProviderScope(
+      container: container,
       child: const PosApp(),
     ),
   );
@@ -96,6 +104,29 @@ class _MainScreenState extends State<MainScreen> {
             backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
             elevation: 0,
             leading: isWide ? const Icon(Icons.point_of_sale, color: Colors.teal) : null,
+            actions: [
+              Consumer(
+                builder: (context, ref, _) {
+                  final pendingAsync = ref.watch(pendingSyncCountProvider);
+                  return pendingAsync.when(
+                    data: (count) => count > 0
+                      ? Tooltip(
+                          message: '$count elemento(s) pendiente(s) de sincronizar',
+                          child: IconButton(
+                            icon: Badge(
+                              label: Text('$count'),
+                              child: const Icon(Icons.cloud_off, color: Colors.orange),
+                            ),
+                            onPressed: () => ref.read(syncServiceProvider).forceSync(),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  );
+                },
+              ),
+            ],
           ),
           drawer: isWide ? null : _buildDrawer(),
           body: Row(

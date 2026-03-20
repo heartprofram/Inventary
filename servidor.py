@@ -1,18 +1,28 @@
 """
-Servidor Proxy para Sistema POS + Inventario
-============================================
+Servidor Proxy para Sistema POS + Inventario (Migrado a FastAPI)
+============================================================
 Sirve la app Flutter Web Y hace de puente seguro con Google Sheets API.
-Corre con: python servidor.py
-Luego abre: http://localhost:8081
+Configurado para manejo asíncrono y robusto.
+
+Requisitos:
+pip install fastapi uvicorn google-auth google-auth-httplib2 google-api-python-client
+
+Ejecutar con: python servidor.py
 """
+
 import json
 import os
 import sys
-import threading
+import time
 import urllib.request
 import webbrowser
-from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+import asyncio
+from typing import List, Optional, Any
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+import uvicorn
 
 try:
     import google.auth
@@ -23,6 +33,7 @@ except ImportError:
     print("  pip install google-auth google-auth-httplib2 google-api-python-client\n")
     exit(1)
 
+# Configuración de Google Sheets
 SPREADSHEET_ID = '1PSLrL9OFdXh-HCwxI1JXdTFM8zL6vMwOx0Yj7rUQ10Y'
 
 def resource_path(relative_path):
@@ -37,16 +48,54 @@ WEB_DIR = resource_path(os.path.join('build', 'web'))
 PORT = 8081
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
+# Inicialización de credenciales y servicio
 creds = service_account.Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
 sheets_service = build('sheets', 'v4', credentials=creds, cache_discovery=False)
 
-def sheets_get(range_name):
+# --- Modelos de Pydantic ---
+
+class RowData(BaseModel):
+    row: list
+
+class VentaVenta(BaseModel):
+    id_venta: str
+    fecha: str
+    total_usd: float
+    total_ves: float
+    tasa_cambio: float
+    metodos_pago: list
+    pdf_url: Optional[str] = ""
+    detalles: Optional[str] = ""
+
+class VentaDetalle(BaseModel):
+    id_producto: str
+    nombre_producto: str
+    cantidad: float
+    precio_unitario_usd: float
+    subtotal_usd: float
+
+class VentaRequest(BaseModel):
+    venta: VentaVenta
+    detalles: List[VentaDetalle]
+
+class UpdateProduct(BaseModel):
+    range: str
+    value: Optional[Any] = None
+    row: Optional[list] = None
+
+class UpdateStatusRequest(BaseModel):
+    id_venta: str
+    metodos_pago: list
+
+# --- Funciones Auxiliares para Google Sheets (Síncronas para run_in_executor) ---
+
+def _sheets_get(range_name):
     result = sheets_service.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID, range=range_name
     ).execute()
     return result.get('values', [])
 
-def sheets_append(range_name, values):
+def _sheets_append(range_name, values):
     sheets_service.spreadsheets().values().append(
         spreadsheetId=SPREADSHEET_ID,
         range=range_name,
@@ -54,7 +103,7 @@ def sheets_append(range_name, values):
         body={'values': values}
     ).execute()
 
-def sheets_update(range_name, values):
+def _sheets_update(range_name, values):
     sheets_service.spreadsheets().values().update(
         spreadsheetId=SPREADSHEET_ID,
         range=range_name,
@@ -62,257 +111,252 @@ def sheets_update(range_name, values):
         body={'values': values}
     ).execute()
 
-class PosHandler(SimpleHTTPRequestHandler):
-    extensions_map = SimpleHTTPRequestHandler.extensions_map.copy()
-    extensions_map.update({
-        '.js': 'application/javascript',
-        '.wasm': 'application/wasm',
-        '.json': 'application/json',
-        '.html': 'text/html',
-        '.css': 'text/css'
-    })
+def _sheets_batch_update(body):
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=SPREADSHEET_ID,
+        body=body
+    ).execute()
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=WEB_DIR, **kwargs)
+def _sheets_get_meta():
+    return sheets_service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
 
-    def end_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        super().end_headers()
+# --- Aplicación FastAPI ---
 
-    def _json_response(self, data, status=200):
-        body = json.dumps(data, ensure_ascii=False).encode('utf-8')
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', len(body))
-        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
-        self.send_header('Pragma', 'no-cache')
-        self.send_header('Expires', '0')
-        self.end_headers()
-        self.wfile.write(body)
-        print(f"   [API] {self.command} {self.path} -> {status}")
+app = FastAPI(title="POS Inventory API")
 
-    def _error(self, msg, status=500):
-        self._json_response({'error': msg}, status)
+# Configuración de CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self.end_headers()
+# Envoltura asíncrona para llamadas a Google Sheets
+async def run_async(func, *args):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, func, *args)
 
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
+# --- Endpoints ---
 
-        if path == '/api/tasa':
-            try:
-                import time
-                timestamp = int(time.time() * 1000)
-                url = f'https://ve.dolarapi.com/v1/dolares/oficial?t={timestamp}'
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    raw_data = json.loads(response.read().decode())
-                    price = float(raw_data.get('promedio', 0.0))
-                    self._json_response({"promedio": price})
-            except Exception as e:
-                self._error(str(e))
+@app.get("/api/tasa")
+async def get_tasa():
+    try:
+        timestamp = int(time.time() * 1000)
+        url = f'https://ve.dolarapi.com/v1/dolares/oficial?t={timestamp}'
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        
+        # urllib es bloqueante, lo corremos en albacea
+        def fetch():
+            with urllib.request.urlopen(req, timeout=10) as response:
+                return json.loads(response.read().decode())
+        
+        raw_data = await run_async(fetch)
+        price = float(raw_data.get('promedio', 0.0))
+        return {"promedio": price}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        elif path == '/api/productos':
-            self._json_response(sheets_get('Productos!A2:G'))
+@app.get("/api/productos")
+async def get_productos():
+    try:
+        return await run_async(_sheets_get, 'Productos!A2:G')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        elif path == '/api/ventas':
-            self._json_response(sheets_get('Ventas!A2:H'))
+@app.get("/api/ventas")
+async def get_ventas():
+    try:
+        return await run_async(_sheets_get, 'Ventas!A2:H')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/detalle_ventas")
+async def get_detalle_ventas():
+    try:
+        return await run_async(_sheets_get, 'DetalleVentas!A2:F')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ventas/pendientes")
+async def get_ventas_pendientes():
+    try:
+        all_ventas = await run_async(_sheets_get, 'Ventas!A2:H')
+        detalle_ventas = await run_async(_sheets_get, 'DetalleVentas!A2:F')
+        pendientes = []
+        for venta_row in all_ventas:
+            if len(venta_row) >= 7 and 'pendiente' in str(venta_row[5]).lower():
+                venta_details = [det for det in detalle_ventas if det and len(det) > 0 and det[0] == venta_row[0]]
+                pendientes.append({
+                    'id_venta': venta_row[0],
+                    'fecha': venta_row[1],
+                    'total_usd': float(venta_row[2]) if len(venta_row) > 2 and venta_row[2] else 0.0,
+                    'deudor': venta_row[7] if len(venta_row) > 7 else '',
+                    'detalles_productos': venta_details,
+                    'metodos_pago': json.loads(venta_row[5]) if len(venta_row) > 5 and venta_row[5] else []
+                })
+        return pendientes
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/movimientos")
+async def get_movimientos():
+    try:
+        return await run_async(_sheets_get, 'Movimientos!A2:F')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/productos")
+async def post_productos(data: RowData):
+    try:
+        await run_async(_sheets_append, 'Productos!A:G', [data.row])
+        return {'ok': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ventas")
+async def post_ventas(data: VentaRequest):
+    try:
+        venta_row = [
+            data.venta.id_venta,
+            data.venta.fecha,
+            data.venta.total_usd,
+            data.venta.total_ves,
+            data.venta.tasa_cambio,
+            json.dumps(data.venta.metodos_pago),
+            data.venta.pdf_url,
+            data.venta.detalles
+        ]
+        await run_async(_sheets_append, 'Ventas!A:H', [venta_row])
+
+        for detalle in data.detalles:
+            detalle_row = [
+                data.venta.id_venta,
+                detalle.id_producto,
+                detalle.nombre_producto,
+                detalle.cantidad,
+                detalle.precio_unitario_usd,
+                detalle.subtotal_usd
+            ]
+            await run_async(_sheets_append, 'DetalleVentas!A:F', [detalle_row])
+        
+        return {'ok': True, 'id_venta': data.venta.id_venta}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/movimientos")
+async def post_movimientos(data: RowData):
+    try:
+        await run_async(_sheets_append, 'Movimientos!A:F', [data.row])
+        return {'ok': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/productos/stock")
+async def put_productos_stock(data: UpdateProduct):
+    try:
+        await run_async(_sheets_update, data.range, [[data.value]])
+        return {'ok': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/productos/update")
+async def put_productos_update(data: UpdateProduct):
+    try:
+        await run_async(_sheets_update, data.range, [data.row])
+        return {'ok': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/ventas/update_status")
+async def update_venta_status(data: UpdateStatusRequest):
+    try:
+        ventas = await run_async(_sheets_get, 'Ventas!A2:H')
+        row_index = -1
+        for i, row in enumerate(ventas):
+            if row and row[0] == data.id_venta:
+                row_index = i + 2  
+                break
+        
+        if row_index == -1:
+            raise HTTPException(status_code=404, detail="ID de venta no encontrado")
+
+        range_to_update = f'Ventas!F{row_index}:H{row_index}'
+        await run_async(_sheets_update, range_to_update, [[json.dumps(data.metodos_pago), '', '']])
+        
+        return {'ok': True, 'message': f'Venta {data.id_venta} actualizada.'}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/ventas/{sale_id}")
+async def delete_venta(sale_id: str):
+    try:
+        meta = await run_async(_sheets_get_meta)
+        sheet_ids = {s['properties']['title']: s['properties']['sheetId'] for s in meta.get('sheets', [])}
+        
+        ventas = await run_async(_sheets_get, 'Ventas!A:H')
+        row_index = -1
+        for i, row in enumerate(ventas):
+            if row and row[0] == sale_id:
+                row_index = i
+                break
+        
+        detalles = await run_async(_sheets_get, 'DetalleVentas!A:G')
+        detail_indices = [i for i, row in enumerate(detalles) if row and row[0] == sale_id]
+        
+        requests = []
+        for idx in sorted(detail_indices, reverse=True):
+            requests.append({
+                'deleteDimension': {
+                    'range': {
+                        'sheetId': sheet_ids.get('DetalleVentas', 0),
+                        'dimension': 'ROWS',
+                        'startIndex': idx,
+                        'endIndex': idx + 1
+                    }
+                }
+            })
+        
+        if row_index != -1:
+            requests.append({
+                'deleteDimension': {
+                    'range': {
+                        'sheetId': sheet_ids.get('Ventas', 0),
+                        'dimension': 'ROWS',
+                        'startIndex': row_index,
+                        'endIndex': row_index + 1
+                    }
+                }
+            })
+        
+        if requests:
+            await run_async(_sheets_batch_update, {'requests': requests})
             
-        elif path == '/api/detalle_ventas':
-            self._json_response(sheets_get('DetalleVentas!A2:F'))
+        return {'ok': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        elif path == '/api/ventas/pendientes':
-            try:
-                all_ventas = sheets_get('Ventas!A2:H')
-                detalle_ventas = sheets_get('DetalleVentas!A2:F')
-                pendientes = []
-                for venta_row in all_ventas:
-                    if len(venta_row) >= 7 and 'pendiente' in str(venta_row[5]).lower():
-                        venta_details = [det for det in detalle_ventas if det and len(det) > 0 and det[0] == venta_row[0]]
-                        pendientes.append({
-                            'id_venta': venta_row[0],
-                            'fecha': venta_row[1],
-                            'total_usd': float(venta_row[2]) if len(venta_row) > 2 and venta_row[2] else 0.0,
-                            'deudor': venta_row[7] if len(venta_row) > 7 else '',
-                            'detalles_productos': venta_details,
-                            'metodos_pago': json.loads(venta_row[5]) if len(venta_row) > 5 and venta_row[5] else []
-                        })
-                self._json_response(pendientes)
-            except Exception as e:
-                self._error(str(e))
+# Servir archivos estáticos del build de Flutter Web
+if os.path.exists(WEB_DIR):
+    app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="static")
 
-        elif path == '/api/movimientos':
-            self._json_response(sheets_get('Movimientos!A2:F'))
-
-        else:
-            super().do_GET()
-
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        length = int(self.headers.get('Content-Length', 0))
-        body = json.loads(self.rfile.read(length)) if length > 0 else {}
-
-        if path == '/api/productos':
-            sheets_append('Productos!A:G', [body.get('row', [])])
-            self._json_response({'ok': True})
-
-        elif path == '/api/ventas':
-            try:
-                venta_data = body.get('venta', {})
-                detalles_data = body.get('detalles', [])
-
-                venta_row = [
-                    venta_data.get('id_venta'),
-                    venta_data.get('fecha'),
-                    venta_data.get('total_usd'),
-                    venta_data.get('total_ves'),
-                    venta_data.get('tasa_cambio'),
-                    json.dumps(venta_data.get('metodos_pago')), 
-                    venta_data.get('pdf_url', ''),
-                    venta_data.get('detalles', '') 
-                ]
-                sheets_append('Ventas!A:H', [venta_row])
-
-                for detalle in detalles_data:
-                    detalle_row = [
-                        venta_data.get('id_venta'),
-                        detalle.get('id_producto'),
-                        detalle.get('nombre_producto'),
-                        detalle.get('cantidad'),
-                        detalle.get('precio_unitario_usd'),
-                        detalle.get('subtotal_usd')
-                    ]
-                    sheets_append('DetalleVentas!A:F', [detalle_row])
-                
-                self._json_response({'ok': True, 'id_venta': venta_data.get('id_venta')})
-            except Exception as e:
-                self._error(str(e))
-
-        elif path == '/api/movimientos':
-            sheets_append('Movimientos!A:F', [body.get('row', [])])
-            self._json_response({'ok': True})
-        else:
-            self._error('Ruta no encontrada', 404)
-
-    def do_PUT(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        length = int(self.headers.get('Content-Length', 0))
-        body = json.loads(self.rfile.read(length)) if length > 0 else {}
-
-        if path == '/api/productos/stock' or path == '/api/productos/update':
-            try:
-                range_name = body.get('range')
-                value = body.get('value') if path == '/api/productos/stock' else body.get('row', [])
-                sheets_update(range_name, [[value]] if path == '/api/productos/stock' else [value])
-                self._json_response({'ok': True})
-            except Exception as e:
-                self._error(str(e))
-
-        elif path == '/api/ventas/update_status':
-            try:
-                sale_id = body.get('id_venta')
-                new_payment_methods = body.get('metodos_pago')
-                
-                ventas = sheets_get('Ventas!A2:H')
-                row_index = -1
-                for i, row in enumerate(ventas):
-                    if row and row[0] == sale_id:
-                        row_index = i + 2  
-                        break
-                
-                if row_index == -1:
-                    return self._error('ID de venta no encontrado', 404)
-
-                range_to_update = f'Ventas!F{row_index}:H{row_index}'
-                sheets_update(range_to_update, [[json.dumps(new_payment_methods), '', '']])
-                
-                self._json_response({'ok': True, 'message': f'Venta {sale_id} actualizada.'})
-            except Exception as e:
-                self._error(str(e))
-        else:
-            self._error('Ruta no encontrada', 404)
-
-    # NUEVO METODO: Capacidad de eliminar (DELETE)
-    def do_DELETE(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-
-        if path.startswith('/api/ventas/'):
-            sale_id = path.split('/')[-1]
-            try:
-                # Obtener IDs de las hojas
-                meta = sheets_service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-                sheet_ids = {s['properties']['title']: s['properties']['sheetId'] for s in meta.get('sheets', [])}
-                
-                ventas = sheets_get('Ventas!A:H')
-                row_index = -1
-                for i, row in enumerate(ventas):
-                    if row and row[0] == sale_id:
-                        row_index = i
-                        break
-                
-                detalles = sheets_get('DetalleVentas!A:F')
-                detail_indices = [i for i, row in enumerate(detalles) if row and row[0] == sale_id]
-                
-                requests = []
-                
-                # Preparar requests de abajo hacia arriba para no dañar los índices
-                for idx in sorted(detail_indices, reverse=True):
-                    requests.append({
-                        'deleteDimension': {
-                            'range': {
-                                'sheetId': sheet_ids.get('DetalleVentas', 0),
-                                'dimension': 'ROWS',
-                                'startIndex': idx,
-                                'endIndex': idx + 1
-                            }
-                        }
-                    })
-                
-                if row_index != -1:
-                    requests.append({
-                        'deleteDimension': {
-                            'range': {
-                                'sheetId': sheet_ids.get('Ventas', 0),
-                                'dimension': 'ROWS',
-                                'startIndex': row_index,
-                                'endIndex': row_index + 1
-                            }
-                        }
-                    })
-                
-                if requests:
-                    sheets_service.spreadsheets().batchUpdate(
-                        spreadsheetId=SPREADSHEET_ID,
-                        body={'requests': requests}
-                    ).execute()
-                    
-                self._json_response({'ok': True})
-            except Exception as e:
-                self._error(str(e))
-        else:
-            self._error('Ruta no encontrada', 404)
-
-    def log_message(self, format, *args):
-        super().log_message(format, *args)
-
+@app.on_event("startup")
+async def startup_event():
+    url = f"http://localhost:{PORT}"
+    print(f"\n[SERVIDOR FASTAPI] Iniciando Sistema POS...")
+    print(f"[SERVIDOR FASTAPI] URL: {url}")
+    print(f"[SERVIDOR FASTAPI] Carpeta Web: {WEB_DIR}")
+    
+    # Abrir navegador tras 1.5 seg
+    def open_browser():
+        time.sleep(1.5)
+        webbrowser.open(url)
+    
+    import threading
+    threading.Thread(target=open_browser, daemon=True).start()
 
 if __name__ == '__main__':
-    url = f"http://localhost:{PORT}"
-    print(f"\n[SERVIDOR] Iniciando Sistema POS...")
-    print(f"[SERVIDOR] URL: {url}")
-    print(f"[SERVIDOR] Carpeta Web: {WEB_DIR}")
-    print(f"\nEscuchando peticiones...\n")
-    
-    # Abrir el navegador predeterminado automáticamente tras un pequeño delay
-    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
-    
-    server = ThreadingHTTPServer(('0.0.0.0', PORT), PosHandler)
-    server.serve_forever()
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

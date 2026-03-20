@@ -36,4 +36,15 @@ class Movement {
       amountVES.toStringAsFixed(2),
     ];
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'date': date.toIso8601String(),
+      'type': type,
+      'description': description,
+      'amountUSD': amountUSD,
+      'amountVES': amountVES,
+    };
+  }
 }

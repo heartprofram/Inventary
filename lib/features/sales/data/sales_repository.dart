@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:dio/dio.dart';
 import 'package:googleapis/sheets/v4.dart' as sheets;
 import '../../../core/services/google_api_service.dart';
+import '../../../core/services/local_storage_service.dart';
 import '../../../core/constants/app_constants.dart';
 import '../domain/sale.dart';
 import '../domain/entities/payment.dart';
@@ -12,12 +13,14 @@ class SalesRepository {
   final Dio dio;
   final GoogleApiService googleApi;
   final ProductRepository productRepository;
+  final LocalStorageService localStorageService;
   final String baseUrl = 'http://localhost:8081/api';
 
   SalesRepository({
     required this.dio, 
     required this.googleApi,
     required this.productRepository,
+    required this.localStorageService,
   });
 
   Future<void> processSale(Sale sale) async {
@@ -54,7 +57,21 @@ class SalesRepository {
         d.subtotalUSD
       ]).toList();
 
-      // 3. Enviar a Google Sheets
+      // 3. Enviar a Google Sheets (con fallback offline)
+      await _sendSaleToNetwork(sale, ventaRow, detallesRows);
+    } catch (e) {
+      // Error de stock u otro error crítico (no de red)
+      throw Exception('Error al procesar la venta: $e');
+    }
+  }
+
+  /// Intenta enviar la venta a la red. Si falla, la guarda en la cola offline.
+  Future<void> _sendSaleToNetwork(
+    Sale sale,
+    List<dynamic> ventaRow,
+    List<List<dynamic>> detallesRows,
+  ) async {
+    try {
       if (kIsWeb) {
         final ventaData = {
           'id_venta': sale.id,
@@ -66,7 +83,6 @@ class SalesRepository {
           'pdf_url': '',
           'detalles': sale.debtorName ?? ''
         };
-
         final detallesData = sale.details.map((d) => {
           'id_producto': d.productId,
           'nombre_producto': d.productName,
@@ -74,21 +90,17 @@ class SalesRepository {
           'precio_unitario_usd': d.unitPriceUSD,
           'subtotal_usd': d.subtotalUSD
         }).toList();
-
         await dio.post('$baseUrl/ventas', data: {
           'venta': ventaData,
           'detalles': detallesData,
         });
       } else {
-        // Guardar cabecera de la venta
         await googleApi.sheetsApi.spreadsheets.values.append(
           sheets.ValueRange(values: [ventaRow]),
           AppConstants.spreadSheetId,
           'Ventas!A:H',
           valueInputOption: 'USER_ENTERED',
         );
-
-        // Guardar detalles de la venta
         await googleApi.sheetsApi.spreadsheets.values.append(
           sheets.ValueRange(values: detallesRows),
           AppConstants.spreadSheetId,
@@ -96,8 +108,92 @@ class SalesRepository {
           valueInputOption: 'USER_ENTERED',
         );
       }
-    } catch (e) {
-      throw Exception('Error al procesar la venta: $e');
+    } catch (networkError) {
+      // Fallo de red → guardar en cola offline
+      debugPrint('[SalesRepo] Error de red, guardando en modo offline: $networkError');
+      await localStorageService.addPendingSale(_saleToJson(sale));
+      // No relanzamos: la UI trata la venta como exitosa localmente.
+    }
+  }
+
+  /// Serializa una venta para la cola offline.
+  Map<String, dynamic> _saleToJson(Sale sale) {
+    return {
+      'id_venta': sale.id,
+      'fecha': sale.date.toIso8601String(),
+      'total_usd': sale.totalUSD,
+      'total_ves': sale.totalVES,
+      'tasa_cambio': sale.exchangeRate,
+      'metodos_pago': sale.payments.map((p) => p.toJson()).toList(),
+      'pdf_url': '',
+      'detalles_nombre': sale.debtorName ?? '',
+      'items': sale.details.map((d) => {
+        'id_producto': d.productId,
+        'nombre_producto': d.productName,
+        'cantidad': d.quantity,
+        'precio_unitario_usd': d.unitPriceUSD,
+        'subtotal_usd': d.subtotalUSD,
+      }).toList(),
+    };
+  }
+
+  /// Re-envía una venta almacenada en la cola offline. Usado por SyncService.
+  Future<void> resyncSale(Map<String, dynamic> saleJson) async {
+    if (kIsWeb) {
+      final detallesData = (saleJson['items'] as List).map((d) => {
+        'id_producto': d['id_producto'],
+        'nombre_producto': d['nombre_producto'],
+        'cantidad': d['cantidad'],
+        'precio_unitario_usd': d['precio_unitario_usd'],
+        'subtotal_usd': d['subtotal_usd'],
+      }).toList();
+      await dio.post('$baseUrl/ventas', data: {
+        'venta': {
+          'id_venta': saleJson['id_venta'],
+          'fecha': saleJson['fecha'],
+          'total_usd': saleJson['total_usd'],
+          'total_ves': saleJson['total_ves'],
+          'tasa_cambio': saleJson['tasa_cambio'],
+          'metodos_pago': saleJson['metodos_pago'],
+          'pdf_url': saleJson['pdf_url'],
+          'detalles': saleJson['detalles_nombre'],
+        },
+        'detalles': detallesData,
+      });
+    } else {
+      final row = [
+        saleJson['id_venta'],
+        saleJson['fecha'],
+        saleJson['total_usd'],
+        saleJson['total_ves'],
+        saleJson['tasa_cambio'],
+        jsonEncode(saleJson['metodos_pago']),
+        saleJson['pdf_url'],
+        saleJson['detalles_nombre'],
+      ];
+      await googleApi.sheetsApi.spreadsheets.values.append(
+        sheets.ValueRange(values: [row]),
+        AppConstants.spreadSheetId,
+        'Ventas!A:H',
+        valueInputOption: 'USER_ENTERED',
+      );
+      final items = saleJson['items'] as List;
+      final detalleRows = items.map<List<dynamic>>((d) => [
+        saleJson['id_venta'],
+        d['id_producto'],
+        d['nombre_producto'],
+        d['cantidad'],
+        d['precio_unitario_usd'],
+        d['subtotal_usd'],
+      ]).toList();
+      if (detalleRows.isNotEmpty) {
+        await googleApi.sheetsApi.spreadsheets.values.append(
+          sheets.ValueRange(values: detalleRows),
+          AppConstants.spreadSheetId,
+          'DetalleVentas!A:F',
+          valueInputOption: 'USER_ENTERED',
+        );
+      }
     }
   }
 

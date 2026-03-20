@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:inventary/core/widgets/shimmer_loading.dart';
 import 'package:inventary/core/widgets/empty_state.dart';
+import 'package:inventary/features/reports/domain/movement.dart';
+import 'package:inventary/features/inventory/domain/product.dart';
+import 'package:inventary/core/providers/core_providers.dart';
+import 'package:inventary/core/widgets/custom_snackbar.dart';
+import 'package:inventary/features/settings/presentation/providers/settings_provider.dart';
 import '../providers/inventory_provider.dart';
 import 'add_product_screen.dart';
 
@@ -109,9 +114,16 @@ class InventoryScreen extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        trailing: IconButton(
-                          onPressed: () {}, // Futuro: editar producto
-                          icon: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: () => _showSurtirDialog(context, ref, product),
+                              icon: const Icon(Icons.add_business_outlined, color: Colors.teal),
+                              tooltip: 'Surtir Stock',
+                            ),
+                            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                          ],
                         ),
                       ),
                     );
@@ -181,6 +193,159 @@ class InventoryScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _showSurtirDialog(BuildContext context, WidgetRef ref, Product product) {
+    final quantityController = TextEditingController(text: '0');
+    final costPriceController = TextEditingController(text: product.costPriceUSD.toString());
+    final salePriceController = TextEditingController(text: product.salePriceUSD.toString());
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.add_business, color: Colors.teal),
+            const SizedBox(width: 12),
+            Expanded(child: Text('Surtir: ${product.name}')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Stock Actual:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('${product.stockQuantity}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.teal)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: quantityController,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Cantidad a Agregar',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.add_box_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: costPriceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Costo USD',
+                      border: OutlineInputBorder(),
+                      prefixText: '\$',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: salePriceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Venta USD',
+                      border: OutlineInputBorder(),
+                      prefixText: '\$',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => _processSurtir(context, ref, product, quantityController, costPriceController, salePriceController),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            child: const Text('Confirmar Entrada'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _processSurtir(
+    BuildContext context, 
+    WidgetRef ref, 
+    Product product,
+    TextEditingController qtyCtrl,
+    TextEditingController costCtrl,
+    TextEditingController saleCtrl
+  ) async {
+    final int addedQty = int.tryParse(qtyCtrl.text) ?? 0;
+    final double newCost = double.tryParse(costCtrl.text) ?? product.costPriceUSD;
+    final double newSale = double.tryParse(saleCtrl.text) ?? product.salePriceUSD;
+
+    if (addedQty <= 0) {
+      CustomSnackBar.warning(context, 'La cantidad debe ser mayor a 0');
+      return;
+    }
+
+    Navigator.pop(context); // Cerrar diálogo
+    
+    // Diálogo de carga
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final updatedProduct = Product(
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        costPriceUSD: newCost,
+        salePriceUSD: newSale,
+        stockQuantity: product.stockQuantity + addedQty,
+        barCode: product.barCode,
+      );
+
+      // 1. Actualizar Producto
+      await ref.read(productRepositoryProvider).updateProduct(updatedProduct);
+
+      // 2. Registrar Movimiento (Egreso)
+      final rate = ref.read(exchangeRateProvider).value?.rate ?? 36.0;
+      final totalCostUSD = addedQty * newCost;
+      
+      final movement = Movement(
+        id: 'MOV-${DateTime.now().millisecondsSinceEpoch}',
+        date: DateTime.now(),
+        type: 'Egreso',
+        description: 'Surtido de inventario: ${product.name}',
+        amountUSD: totalCostUSD,
+        amountVES: totalCostUSD * rate,
+      );
+
+      await ref.read(movementRepositoryProvider).addMovement(movement);
+
+      // 3. Refrescar Inventario
+      await ref.read(inventoryProvider.notifier).refresh();
+
+      if (context.mounted) {
+        Navigator.pop(context); // Cerrar carga
+        CustomSnackBar.success(context, 'Surtido completado exitosamente.');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Cerrar carga
+        CustomSnackBar.error(context, 'Error al procesar surtido: $e');
+      }
+    }
   }
 
   void _navigateToAdd(BuildContext context) {

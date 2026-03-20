@@ -34,10 +34,10 @@ class _SalesHistoryScreenState extends ConsumerState<SalesHistoryScreen> {
         foregroundColor: Colors.teal,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf),
+          TextButton.icon(
             onPressed: _cachedSales.isEmpty ? null : () => _showExportMenu(context),
-            tooltip: 'Exportar Reporte',
+            icon: const Icon(Icons.picture_as_pdf, size: 20),
+            label: const Text('Exportar Reporte', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
