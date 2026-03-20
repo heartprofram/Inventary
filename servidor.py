@@ -13,15 +13,17 @@ Ejecutar con: python servidor.py
 import json
 import os
 import sys
+import logging
 import time
 import urllib.request
 import webbrowser
 import asyncio
 from typing import List, Optional, Any
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 import uvicorn
 
 try:
@@ -49,7 +51,12 @@ PORT = 8081
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 # Inicialización de credenciales y servicio
-creds = service_account.Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+try:
+    creds = service_account.Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+except Exception as e:
+    print(f"\n[ERROR] No se pudieron cargar las credenciales: {e}")
+    print(f"Asegúrate de que {CREDENTIALS_FILE} existe y es válido.")
+    sys.exit(1)
 sheets_service = build('sheets', 'v4', credentials=creds, cache_discovery=False)
 
 # --- Modelos de Pydantic ---
@@ -120,9 +127,33 @@ def _sheets_batch_update(body):
 def _sheets_get_meta():
     return sheets_service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
 
+# Envoltura asíncrona para llamadas bloqueantes
+async def run_async(func, *args):
+    return await asyncio.to_thread(func, *args)
+
+# --- Lifespan de la Aplicación ---
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Abrir navegador tras 1.5 seg
+    url = f"http://localhost:{PORT}"
+    print(f"\n[SERVIDOR FASTAPI] Iniciando Sistema POS...")
+    print(f"[SERVIDOR FASTAPI] URL: {url}")
+    print(f"[SERVIDOR FASTAPI] Carpeta Web: {WEB_DIR}")
+    
+    def open_browser():
+        time.sleep(1.5)
+        webbrowser.open(url)
+    
+    import threading
+    threading.Thread(target=open_browser, daemon=True).start()
+    
+    yield
+    # Shutdown: No se requiere acción adicional
+
 # --- Aplicación FastAPI ---
 
-app = FastAPI(title="POS Inventory API")
+app = FastAPI(title="POS Inventory API", lifespan=lifespan)
 
 # Configuración de CORS
 app.add_middleware(
@@ -132,11 +163,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Envoltura asíncrona para llamadas a Google Sheets
-async def run_async(func, *args):
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, func, *args)
 
 # --- Endpoints ---
 
@@ -301,7 +327,7 @@ async def delete_venta(sale_id: str):
         row_index = -1
         for i, row in enumerate(ventas):
             if row and row[0] == sale_id:
-                row_index = i
+                row_index = i # Índice base 0
                 break
         
         detalles = await run_async(_sheets_get, 'DetalleVentas!A:G')
@@ -342,21 +368,6 @@ async def delete_venta(sale_id: str):
 # Servir archivos estáticos del build de Flutter Web
 if os.path.exists(WEB_DIR):
     app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="static")
-
-@app.on_event("startup")
-async def startup_event():
-    url = f"http://localhost:{PORT}"
-    print(f"\n[SERVIDOR FASTAPI] Iniciando Sistema POS...")
-    print(f"[SERVIDOR FASTAPI] URL: {url}")
-    print(f"[SERVIDOR FASTAPI] Carpeta Web: {WEB_DIR}")
-    
-    # Abrir navegador tras 1.5 seg
-    def open_browser():
-        time.sleep(1.5)
-        webbrowser.open(url)
-    
-    import threading
-    threading.Thread(target=open_browser, daemon=True).start()
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=PORT)
