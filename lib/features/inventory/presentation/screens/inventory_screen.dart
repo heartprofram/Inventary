@@ -99,7 +99,7 @@ class InventoryScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const SizedBox(height: 4),
-                            Text('ID: ${product.barCode}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text('Código: ${product.barCode} | ID: ${product.id}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                             const SizedBox(height: 8),
                             Row(
                               children: [
@@ -110,21 +110,20 @@ class InventoryScreen extends ConsumerWidget {
                                   isLowStock ? Colors.red : Colors.blueGrey,
                                   isBold: isLowStock,
                                 ),
+                                const Spacer(),
+                                IconButton(
+                                  onPressed: () => _showSurtirDialog(context, ref, product),
+                                  icon: const Icon(Icons.add_business_outlined, color: Colors.teal),
+                                  tooltip: 'Surtir Stock',
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.teal.withOpacity(0.1),
+                                  ),
+                                ),
                               ],
                             ),
                           ],
                         ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              onPressed: () => _showSurtirDialog(context, ref, product),
-                              icon: const Icon(Icons.add_business_outlined, color: Colors.teal),
-                              tooltip: 'Surtir Stock',
-                            ),
-                            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                          ],
-                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                       ),
                     );
                   },

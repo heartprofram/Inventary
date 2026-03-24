@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/core_providers.dart';
 import '../../domain/product.dart';
 import '../providers/inventory_provider.dart';
 
@@ -21,6 +22,40 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _barcodeController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isGeneratingId = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _generateNextId();
+  }
+
+  Future<void> _generateNextId() async {
+    try {
+      // Intentar obtener productos actuales para generar el siguiente ID
+      final products = await ref.read(productRepositoryProvider).getProducts();
+      int maxId = 0;
+      final idPattern = RegExp(r'PRD-(\d+)');
+
+      for (var p in products) {
+        final match = idPattern.firstMatch(p.id);
+        if (match != null) {
+          final val = int.parse(match.group(1)!);
+          if (val > maxId) maxId = val;
+        }
+      }
+
+      final nextIdNum = maxId + 1;
+      _idController.text = 'PRD-${nextIdNum.toString().padLeft(3, '0')}';
+    } catch (e) {
+      debugPrint('Error generando ID: $e');
+      _idController.text = 'PRD-001'; // Fallback
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingId = false);
+      }
+    }
+  }
 
   Future<void> _saveProduct() async {
     if (_formKey.currentState!.validate()) {
@@ -77,7 +112,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       appBar: AppBar(
         title: const Text('Agregar Nuevo Producto'),
       ),
-      body: _isLoading 
+      body: (_isLoading || _isGeneratingId)
         ? const Center(child: CircularProgressIndicator())
         : SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
@@ -87,8 +122,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 children: [
                   TextFormField(
                     controller: _idController,
-                    decoration: const InputDecoration(labelText: 'ID (Ej: PRD-001)'),
-                    validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                    decoration: const InputDecoration(
+                      labelText: 'ID del Producto (Auto)',
+                      border: OutlineInputBorder(),
+                      filled: true,
+                    ),
+                    readOnly: true,
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal),
                   ),
                   const SizedBox(height: 10),
                   TextFormField(

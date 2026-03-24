@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:inventary/features/sales/domain/entities/payment.dart';
 import '../../domain/sale.dart';
 import '../../../../core/providers/core_providers.dart';
+import 'package:inventary/features/inventory/presentation/providers/inventory_provider.dart';
 
 class EditSaleScreen extends ConsumerStatefulWidget {
   final Sale sale;
@@ -101,6 +102,20 @@ class _EditSaleScreenState extends ConsumerState<EditSaleScreen> {
               textAlign: TextAlign.justify,
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: OutlinedButton.icon(
+              onPressed: () => _showAddProductDialog(context),
+              icon: const Icon(Icons.add_shopping_cart, color: Colors.teal),
+              label: const Text('Agregar Otro Producto | Cambiar'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 48),
+                side: const BorderSide(color: Colors.teal),
+                foregroundColor: Colors.teal,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Expanded(
             child: ListView.builder(
               itemCount: _details.length,
@@ -175,6 +190,70 @@ class _EditSaleScreenState extends ConsumerState<EditSaleScreen> {
           )
         ],
       ),
+    );
+  }
+
+  void _showAddProductDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          minChildSize: 0.5,
+          initialChildSize: 0.7,
+          maxChildSize: 0.9,
+          builder: (_, scrollController) {
+            return Consumer(
+              builder: (context, ref, child) {
+                final inventoryAsync = ref.watch(inventoryProvider);
+                return inventoryAsync.when(
+                  data: (products) => Column(
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text('Seleccionar Producto de Reemplazo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      ),
+                      Expanded(
+                        child: ListView.builder(
+                          controller: scrollController,
+                          itemCount: products.length,
+                          itemBuilder: (context, index) {
+                            final p = products[index];
+                            return ListTile(
+                              leading: const CircleAvatar(backgroundColor: Colors.teal, child: Icon(Icons.inventory_2, size: 20, color: Colors.white)),
+                              title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('\$${p.salePriceUSD} - Stock: ${p.stockQuantity}'),
+                              onTap: () {
+                                setState(() {
+                                  final existingIdx = _details.indexWhere((d) => d.productId == p.id);
+                                  if (existingIdx >= 0) {
+                                    _updateQuantity(existingIdx, 1);
+                                  } else {
+                                    _details.add(SaleDetail(
+                                      productId: p.id,
+                                      productName: p.name,
+                                      quantity: 1,
+                                      unitPriceUSD: p.salePriceUSD,
+                                    ));
+                                  }
+                                });
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Center(child: Text('Error: $e')),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

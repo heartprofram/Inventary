@@ -63,7 +63,7 @@ class ReportsScreen extends ConsumerWidget {
                 _buildSectionHeader('Desglose de Pagos', 'Por método seleccionado'),
                 const SizedBox(height: 16),
                 ...metrics.paymentsUSD.entries.map((entry) {
-                  final vesVal = entry.value * (metrics.sales.isNotEmpty ? metrics.sales.first.exchangeRate : 36.0);
+                  final vesVal = metrics.paymentsVES[entry.key] ?? 0.0;
                   return Card(
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey[200]!)),
@@ -71,7 +71,7 @@ class ReportsScreen extends ConsumerWidget {
                     child: ListTile(
                       leading: const CircleAvatar(backgroundColor: Colors.teal, foregroundColor: Colors.white, child: Icon(Icons.payment, size: 20)),
                       title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Equivalente: Bs. ${vesVal.toStringAsFixed(2)}'),
+                      subtitle: Text('Equivalente Bs. ${vesVal.toStringAsFixed(2)}'),
                       trailing: Text('\$${entry.value.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
                     ),
                   );

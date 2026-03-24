@@ -43,8 +43,8 @@ class SalesRepository {
         sale.totalUSD,
         sale.totalVES,
         sale.exchangeRate,
-        jsonEncode(sale.payments.map((p) => p.toJson()).toList()),
         '', // pdf_url
+        jsonEncode(sale.payments.map((p) => p.toJson()).toList()),
         sale.debtorName ?? ''
       ];
 
@@ -167,8 +167,8 @@ class SalesRepository {
         saleJson['total_usd'],
         saleJson['total_ves'],
         saleJson['tasa_cambio'],
-        jsonEncode(saleJson['metodos_pago']),
         saleJson['pdf_url'],
+        jsonEncode(saleJson['metodos_pago']),
         saleJson['detalles_nombre'],
       ];
       await googleApi.sheetsApi.spreadsheets.values.append(
@@ -242,12 +242,12 @@ class SalesRepository {
         final exchangeRate = double.tryParse(row[4].toString().replaceAll(',', '.')) ?? 1.0;
         
         List<Payment> parsedPayments = [];
-        if (row.length >= 6 && row[5].toString().isNotEmpty) {
+        if (row.length >= 7 && row[6].toString().isNotEmpty) {
            try {
-             final List<dynamic> pmList = jsonDecode(row[5].toString());
+             final List<dynamic> pmList = jsonDecode(row[6].toString());
              parsedPayments = pmList.map((p) => Payment(method: p['method'], amount: (p['amount'] as num).toDouble())).toList();
            } catch(e) {
-             parsedPayments = [Payment(method: row[5].toString(), amount: totalUSD)];
+             parsedPayments = [Payment(method: row[6].toString(), amount: totalUSD)];
            }
         } else {
            parsedPayments = [Payment(method: 'Efectivo', amount: totalUSD)];
@@ -307,7 +307,7 @@ class SalesRepository {
           await googleApi.sheetsApi.spreadsheets.values.update(
             sheets.ValueRange(values: [[paymentsJson]]),
             AppConstants.spreadSheetId,
-            'Ventas!F$rowIndex',
+            'Ventas!G$rowIndex',
             valueInputOption: 'USER_ENTERED',
           );
         }

@@ -37,7 +37,7 @@ class ReportsNotifier extends AsyncNotifier<DailyReportMetrics> {
     final sales = await repo.getDailySales();
 
     final totalUSD = sales.fold(0.0, (sum, sale) => sum + sale.totalUSD);
-    final totalVES = sales.fold(0.0, (sum, sale) => sum + sale.totalVES);
+    final totalVES = sales.fold(0.0, (sum, sale) => sum + (sale.totalVES > 0 ? sale.totalVES : sale.totalUSD * sale.exchangeRate));
     
     // Desglose por método de pago
     final Map<String, double> paymentsUSD = {};

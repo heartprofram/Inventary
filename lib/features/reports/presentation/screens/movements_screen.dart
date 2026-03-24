@@ -20,6 +20,13 @@ class _MovementsScreenState extends ConsumerState<MovementsScreen> {
     final movementsAsync = ref.watch(movementsProvider);
 
     return Scaffold(
+      appBar: AppBar(
+        leading: const BackButton(),
+        title: const Text('Registro de Movimientos', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.teal,
+        elevation: 0,
+      ),
       body: movementsAsync.when(
         data: (movements) {
           if (movements.isEmpty) {

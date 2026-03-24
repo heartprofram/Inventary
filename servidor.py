@@ -250,8 +250,8 @@ async def post_ventas(data: VentaRequest):
             data.venta.total_usd,
             data.venta.total_ves,
             data.venta.tasa_cambio,
-            json.dumps(data.venta.metodos_pago),
             data.venta.pdf_url,
+            json.dumps(data.venta.metodos_pago),
             data.venta.detalles
         ]
         await run_async(_sheets_append, 'Ventas!A:H', [venta_row])
@@ -308,8 +308,8 @@ async def update_venta_status(data: UpdateStatusRequest):
         if row_index == -1:
             raise HTTPException(status_code=404, detail="ID de venta no encontrado")
 
-        range_to_update = f'Ventas!F{row_index}:H{row_index}'
-        await run_async(_sheets_update, range_to_update, [[json.dumps(data.metodos_pago), '', '']])
+        range_to_update = f'Ventas!G{row_index}'
+        await run_async(_sheets_update, range_to_update, [[json.dumps(data.metodos_pago)]])
         
         return {'ok': True, 'message': f'Venta {data.id_venta} actualizada.'}
     except HTTPException:

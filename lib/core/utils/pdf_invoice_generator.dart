@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import '../../features/sales/domain/sale.dart';
 
 // ─── Paleta de colores corporativa ───────────────────────────────────────────
@@ -60,7 +61,7 @@ class PdfInvoiceGenerator {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('SISTEMA POS', style: pw.TextStyle(
+                  pw.Text('INVENTARY & POS v1.9.3', style: pw.TextStyle(
                     fontSize: 9, color: _kPrimaryLight,
                     fontWeight: pw.FontWeight.bold,
                     letterSpacing: 1.5,
@@ -131,7 +132,7 @@ class PdfInvoiceGenerator {
       pw.Center(child: pw.Text(msg, style: _body(color: _kGrey600, size: 8))),
       pw.SizedBox(height: 4),
       pw.Center(child: pw.Text(
-        'Sistema POS v1.0  •  ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
+        'Inventary & POS v1.9.3  •  ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
         style: _body(color: _kGrey600, size: 7),
       )),
     ],
@@ -142,7 +143,9 @@ class PdfInvoiceGenerator {
   // ══════════════════════════════════════════════════════════════════════════
 
   static Future<Uint8List> generateInvoice(Sale sale) async {
-    final pdf = pw.Document();
+    final font = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+    final pdf = pw.Document(theme: pw.ThemeData.withFont(base: font, bold: fontBold));
     final fmt = DateFormat('dd/MM/yyyy  HH:mm');
 
     pdf.addPage(pw.Page(
@@ -153,7 +156,7 @@ class PdfInvoiceGenerator {
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
             // ── Encabezado ──────────────────────────────────────────────
-            pw.Center(child: pw.Text('TIENDA POS', style: pw.TextStyle(
+            pw.Center(child: pw.Text('INVENTARY', style: pw.TextStyle(
               fontSize: 14, fontWeight: pw.FontWeight.bold,
               color: _kAccent, letterSpacing: 1.5,
             ))),
@@ -265,7 +268,9 @@ class PdfInvoiceGenerator {
   // ══════════════════════════════════════════════════════════════════════════
 
   static Future<Uint8List> generateSimpleInvoice(Sale sale) async {
-    final pdf = pw.Document();
+    final font = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+    final pdf = pw.Document(theme: pw.ThemeData.withFont(base: font, bold: fontBold));
     final fmt = DateFormat('dd/MM/yyyy  HH:mm');
 
     pdf.addPage(pw.Page(
@@ -276,7 +281,7 @@ class PdfInvoiceGenerator {
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
             // ── Encabezado ──────────────────────────────────────────────
-            pw.Center(child: pw.Text('TIENDA POS', style: pw.TextStyle(
+            pw.Center(child: pw.Text('INVENTARY', style: pw.TextStyle(
               fontSize: 14, fontWeight: pw.FontWeight.bold,
               color: _kAccent, letterSpacing: 1.5,
             ))),
@@ -364,7 +369,9 @@ class PdfInvoiceGenerator {
   static Future<Uint8List> generateZReport(
     List<Sale> sales, double totalUSD, double totalVES,
   ) async {
-    final pdf = pw.Document();
+    final font = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+    final pdf = pw.Document(theme: pw.ThemeData.withFont(base: font, bold: fontBold));
     final now = DateTime.now();
     final fmt = DateFormat('dd/MM/yyyy  HH:mm');
 
@@ -384,7 +391,7 @@ class PdfInvoiceGenerator {
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
             // ── Encabezado ──────────────────────────────────────────────
-            pw.Center(child: pw.Text('TIENDA POS', style: pw.TextStyle(
+            pw.Center(child: pw.Text('INVENTARY', style: pw.TextStyle(
               fontSize: 14, fontWeight: pw.FontWeight.bold,
               color: _kAccent, letterSpacing: 1.5,
             ))),
@@ -392,7 +399,7 @@ class PdfInvoiceGenerator {
             pw.Container(
               padding: const pw.EdgeInsets.symmetric(vertical: 4),
               color: _kAccent,
-              child: pw.Center(child: pw.Text('CIERRE DE CAJA  —  REPORTE Z', style: pw.TextStyle(
+              child: pw.Center(child: pw.Text('REPORTE CIERRE DE CAJA', style: pw.TextStyle(
                 fontSize: 9, fontWeight: pw.FontWeight.bold, color: _kWhite, letterSpacing: 1,
               ))),
             ),
@@ -408,37 +415,33 @@ class PdfInvoiceGenerator {
             ),
             pw.SizedBox(height: 4),
 
-            // Mini-tabla de ventas
-            pw.Container(
-              color: _kGrey100,
-              padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 2),
-              child: pw.Row(children: [
-                pw.Expanded(flex: 3, child: pw.Text('ID', style: _tableHeader().copyWith(color: _kGrey800))),
-                pw.Expanded(flex: 2, child: pw.Text('Hora', textAlign: pw.TextAlign.center, style: _tableHeader().copyWith(color: _kGrey800))),
-                pw.Expanded(flex: 3, child: pw.Text('Total USD', textAlign: pw.TextAlign.right, style: _tableHeader().copyWith(color: _kGrey800))),
-              ]),
-            ),
-            _divider(),
-            ...sales.map((sale) => pw.Container(
-              padding: const pw.EdgeInsets.symmetric(vertical: 2.5, horizontal: 2),
-              decoration: const pw.BoxDecoration(
-                border: pw.Border(bottom: pw.BorderSide(color: _kGrey300, width: 0.3)),
+            // Ventas detalladas
+            ...sales.expand((sale) => [
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _kPrimary, width: 0.5))),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('ID: ${sale.id.length > 10 ? sale.id.substring(sale.id.length - 8) : sale.id} | ${DateFormat('HH:mm').format(sale.date)}', style: _body(size: 8, color: _kAccent).copyWith(fontWeight: pw.FontWeight.bold)),
+                    pw.Text('\$${sale.totalUSD.toStringAsFixed(2)} / Bs. ${sale.totalVES.toStringAsFixed(2)}', style: _mono(size: 8, color: _kSuccess).copyWith(fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
               ),
-              child: pw.Row(children: [
-                pw.Expanded(flex: 3, child: pw.Text(
-                  sale.id.length > 10 ? sale.id.substring(sale.id.length - 8) : sale.id,
-                  style: _mono(size: 7.5),
-                )),
-                pw.Expanded(flex: 2, child: pw.Text(
-                  DateFormat('HH:mm').format(sale.date),
-                  textAlign: pw.TextAlign.center, style: _body(size: 7.5),
-                )),
-                pw.Expanded(flex: 3, child: pw.Text(
-                  '\$${sale.totalUSD.toStringAsFixed(2)}',
-                  textAlign: pw.TextAlign.right, style: _mono(size: 7.5, color: _kSuccess),
-                )),
-              ]),
-            )),
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(left: 4, top: 2, bottom: 4),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                  children: sale.details.map((item) => pw.Row(
+                    children: [
+                      pw.Text('• ${item.quantity}x ', style: _body(size: 7.5, color: _kGrey600)),
+                      pw.Expanded(child: pw.Text(item.productName, style: _body(size: 7.5))),
+                      pw.Text('\$${item.subtotalUSD.toStringAsFixed(2)}', style: _mono(size: 7.5, color: _kGrey600)),
+                    ]
+                  )).toList(),
+                ),
+              ),
+            ]),
             pw.SizedBox(height: 4),
             _divider(color: _kGrey300),
             _kv('Total de transacciones:', '${sales.length}', bold: true, size: 8),
@@ -485,8 +488,10 @@ class PdfInvoiceGenerator {
                 ]),
                 pw.SizedBox(height: 4),
                 pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                  pw.Text('TOTAL VES:', style: _body(size: 9, color: _kGrey600)),
-                  pw.Text('Bs. ${totalVES.toStringAsFixed(2)}', style: _body(size: 9, color: _kGrey800)),
+                  pw.Text('TOTAL VES:', style: _h2(color: _kAccent)),
+                  pw.Text('Bs. ${totalVES.toStringAsFixed(2)}', style: pw.TextStyle(
+                    fontSize: 14, fontWeight: pw.FontWeight.bold, color: _kSuccess,
+                  )),
                 ]),
               ]),
             ),
@@ -507,7 +512,9 @@ class PdfInvoiceGenerator {
   static Future<Uint8List> generateSalesReport(
     List<Sale> sales, String periodName,
   ) async {
-    final pdf = pw.Document();
+    final font = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+    final pdf = pw.Document(theme: pw.ThemeData.withFont(base: font, bold: fontBold));
     final totalUSD = sales.fold(0.0, (s, sale) => s + sale.totalUSD);
     final totalVES = sales.fold(0.0, (s, sale) => s + sale.totalVES);
     final now = DateTime.now();
@@ -530,7 +537,7 @@ class PdfInvoiceGenerator {
         child: pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text('Sistema POS  •  Reporte confidencial', style: _body(color: _kGrey600, size: 7.5)),
+            pw.Text('Inventary & POS v1.9.3  •  Reporte confidencial', style: _body(color: _kGrey600, size: 7.5)),
             pw.Text('Página ${context.pageNumber} de ${context.pagesCount}', style: _body(color: _kGrey600, size: 7.5)),
           ],
         ),

@@ -114,15 +114,25 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
                             '${pending.detallesProductos.length} productos',
                             style: const TextStyle(color: Colors.grey, fontSize: 13),
                           ),
-                          ElevatedButton.icon(
-                            onPressed: () => _showPaymentModal(context, ref, pending, currentRate),
-                            icon: const Icon(Icons.payments_outlined, size: 18),
-                            label: const Text('PROCESAR PAGO'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.teal,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                tooltip: 'Eliminar deuda',
+                                onPressed: () => _showDeleteConfirmation(context, ref, pending, currentRate),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                onPressed: () => _showPaymentModal(context, ref, pending, currentRate),
+                                icon: const Icon(Icons.payments_outlined, size: 18),
+                                label: const Text('PROCESAR PAGO'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.teal,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -257,6 +267,44 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
         CustomSnackBar.error(context, 'Error al procesar el pago: $e');
       }
     }
+  }
+
+  void _showDeleteConfirmation(BuildContext context, WidgetRef ref, PendingPayment pending, double rate) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Eliminar Deuda'),
+        content: const Text('¿Estás seguro de que deseas eliminar esta cuenta por cobrar?\n\nEsta acción no se puede deshacer y devolverá los productos al inventario.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+              try {
+                final sale = pending.toSale(rate);
+                await ref.read(salesRepositoryProvider).deleteSale(sale);
+                if (context.mounted) {
+                  Navigator.pop(context); // Close loading
+                  CustomSnackBar.success(context, 'Deuda eliminada exitosamente.');
+                  ref.read(pendingPaymentsProvider.notifier).refresh();
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(context); // Close loading
+                  CustomSnackBar.error(context, 'Error al eliminar: $e');
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            child: const Text('Eliminar definitivamente'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
