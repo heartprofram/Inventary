@@ -287,15 +287,17 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
               try {
                 final sale = pending.toSale(rate);
                 await ref.read(salesRepositoryProvider).deleteSale(sale);
+                ref.invalidate(pendingPaymentsProvider);
                 if (context.mounted) {
-                  Navigator.pop(context); // Close loading
                   CustomSnackBar.success(context, 'Deuda eliminada exitosamente.');
-                  ref.read(pendingPaymentsProvider.notifier).refresh();
                 }
               } catch (e) {
                 if (context.mounted) {
-                  Navigator.pop(context); // Close loading
                   CustomSnackBar.error(context, 'Error al eliminar: $e');
+                }
+              } finally {
+                if (context.mounted) {
+                  Navigator.of(context, rootNavigator: true).pop();
                 }
               }
             },

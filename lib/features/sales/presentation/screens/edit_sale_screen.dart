@@ -128,6 +128,11 @@ class _EditSaleScreenState extends ConsumerState<EditSaleScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
+                        icon: const Icon(Icons.swap_horiz_outlined, color: Colors.blue),
+                        onPressed: () => _showSwapProductDialog(context, index),
+                        tooltip: 'Cambiar Producto',
+                      ),
+                      IconButton(
                         icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
                         onPressed: () => _updateQuantity(index, -1),
                       ),
@@ -190,6 +195,76 @@ class _EditSaleScreenState extends ConsumerState<EditSaleScreen> {
           )
         ],
       ),
+    );
+  }
+
+  void _showSwapProductDialog(BuildContext context, int indexToReplace) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          minChildSize: 0.5,
+          initialChildSize: 0.7,
+          maxChildSize: 0.9,
+          builder: (_, scrollController) {
+            return Consumer(
+              builder: (context, ref, child) {
+                final inventoryAsync = ref.watch(inventoryProvider);
+                return inventoryAsync.when(
+                  data: (products) => Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          'Cambiar "${_details[indexToReplace].productName}" por:', 
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Expanded(
+                        child: ListView.builder(
+                          controller: scrollController,
+                          itemCount: products.length,
+                          itemBuilder: (context, index) {
+                            final p = products[index];
+                            return ListTile(
+                              leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.swap_horiz, size: 20, color: Colors.white)),
+                              title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('\$${p.salePriceUSD} - Stock: ${p.stockQuantity}'),
+                              onTap: () {
+                                setState(() {
+                                  final oldQuantity = _details[indexToReplace].quantity;
+                                  final existingIdx = _details.indexWhere((d) => d.productId == p.id);
+                                  
+                                  if (existingIdx >= 0 && existingIdx != indexToReplace) {
+                                    _updateQuantity(existingIdx, oldQuantity);
+                                    _details.removeAt(indexToReplace);
+                                  } else {
+                                    _details[indexToReplace] = SaleDetail(
+                                      productId: p.id,
+                                      productName: p.name,
+                                      quantity: oldQuantity,
+                                      unitPriceUSD: p.salePriceUSD,
+                                    );
+                                  }
+                                });
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Center(child: Text('Error: $e')),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 

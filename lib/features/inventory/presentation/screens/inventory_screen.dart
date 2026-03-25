@@ -99,7 +99,9 @@ class InventoryScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const SizedBox(height: 4),
-                            Text('Código: ${product.barCode} | ID: ${product.id}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text('Código: ${product.barCode}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            const SizedBox(height: 2),
+                            Text('ID: ${product.id}', style: const TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic)),
                             const SizedBox(height: 8),
                             Row(
                               children: [
@@ -294,7 +296,7 @@ class InventoryScreen extends ConsumerWidget {
       return;
     }
 
-    Navigator.pop(context); // Cerrar diálogo
+    Navigator.pop(context); // Cerrar diálogo inicial
     
     // Diálogo de carga
     showDialog(
@@ -333,16 +335,19 @@ class InventoryScreen extends ConsumerWidget {
       await ref.read(movementRepositoryProvider).addMovement(movement);
 
       // 3. Refrescar Inventario
-      await ref.read(inventoryProvider.notifier).refresh();
+      ref.invalidate(inventoryProvider);
 
       if (context.mounted) {
-        Navigator.pop(context); // Cerrar carga
         CustomSnackBar.success(context, 'Surtido completado exitosamente.');
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context); // Cerrar carga
         CustomSnackBar.error(context, 'Error al procesar surtido: $e');
+      }
+    } finally {
+      if (context.mounted) {
+        // Cerrar carga usando rootNavigator para evitar conflictos de contexto
+        Navigator.of(context, rootNavigator: true).pop();
       }
     }
   }
