@@ -43,9 +43,9 @@ class SalesRepository {
         sale.totalUSD,
         sale.totalVES,
         sale.exchangeRate,
-        '', // pdf_url
+        ' ', // pdf_url: espacio para evitar que Google Sheets desplace columnas
         jsonEncode(sale.payments.map((p) => p.toJson()).toList()),
-        sale.debtorName ?? ''
+        sale.debtorName != null && sale.debtorName!.trim().isNotEmpty ? sale.debtorName! : ' '
       ];
 
       final List<List<dynamic>> detallesRows = sale.details.map((d) => [
@@ -80,8 +80,8 @@ class SalesRepository {
           'total_ves': sale.totalVES,
           'tasa_cambio': sale.exchangeRate,
           'metodos_pago': sale.payments.map((p) => p.toJson()).toList(),
-          'pdf_url': '',
-          'detalles': sale.debtorName ?? ''
+          'pdf_url': ' ', // Fuerza espacio para evadir compresión
+          'detalles': sale.debtorName != null && sale.debtorName!.trim().isNotEmpty ? sale.debtorName! : ' '
         };
         final detallesData = sale.details.map((d) => {
           'id_producto': d.productId,
@@ -197,13 +197,13 @@ class SalesRepository {
     }
   }
 
-  Future<List<Sale>> getSalesHistory() async {
+  Future<List<Sale>> getSalesHistory({int days = 30}) async {
     try {
       List<dynamic> ventasRows;
       List<dynamic> detallesRows;
 
       if (kIsWeb) {
-        final ventasResp = await dio.get('$baseUrl/ventas');
+        final ventasResp = await dio.get('$baseUrl/ventas', queryParameters: {'days': days});
         final detallesResp = await dio.get('$baseUrl/detalle_ventas');
         ventasRows = ventasResp.data ?? [];
         detallesRows = detallesResp.data ?? [];
@@ -218,6 +218,19 @@ class SalesRepository {
         );
         ventasRows = vResp.values ?? [];
         detallesRows = dResp.values ?? [];
+
+        if (days > 0) {
+          final cutoffDate = DateTime.now().subtract(Duration(days: days));
+          ventasRows = ventasRows.where((row) {
+            if (row.length < 2) return false;
+            try {
+               final date = DateTime.parse(row[1].toString());
+               return date.isAfter(cutoffDate) || date.isAtSameMomentAs(cutoffDate);
+            } catch (_) {
+               return true;
+            }
+          }).toList();
+        }
       }
 
       final Map<String, List<SaleDetail>> detailsMap = {};
@@ -242,18 +255,37 @@ class SalesRepository {
         final exchangeRate = double.tryParse(row[4].toString().replaceAll(',', '.')) ?? 1.0;
         
         List<Payment> parsedPayments = [];
-        if (row.length >= 7 && row[6].toString().isNotEmpty) {
-           try {
-             final List<dynamic> pmList = jsonDecode(row[6].toString());
-             parsedPayments = pmList.map((p) => Payment(method: p['method'], amount: (p['amount'] as num).toDouble())).toList();
-           } catch(e) {
-             parsedPayments = [Payment(method: row[6].toString(), amount: totalUSD)];
+        String? debtorName;
+
+        int pIndex = -1;
+        for (int i = 5; i < row.length; i++) {
+           String val = row[i].toString().trim();
+           if (val.startsWith('[') && val.endsWith(']')) {
+              pIndex = i;
+              break;
            }
-        } else {
-           parsedPayments = [Payment(method: 'Efectivo', amount: totalUSD)];
         }
 
-        final debtorName = row.length >= 8 ? row[7].toString() : null;
+        if (pIndex != -1) {
+           try {
+             final pmList = jsonDecode(row[pIndex].toString()) as List;
+             parsedPayments = pmList.map((p) => Payment(method: p['method']?.toString() ?? 'Desconocido', amount: (p['amount'] as num).toDouble())).toList();
+           } catch(e) {
+             parsedPayments = [Payment(method: 'Efectivo', amount: totalUSD)];
+           }
+           
+           if (row.length > pIndex + 1) {
+              debtorName = row[pIndex + 1].toString();
+           }
+        } else {
+           if (row.length >= 7 && row[6].toString().isNotEmpty && !row[6].toString().startsWith('http')) {
+              parsedPayments = [Payment(method: row[6].toString(), amount: totalUSD)];
+           } else {
+              parsedPayments = [Payment(method: 'Efectivo', amount: totalUSD)];
+           }
+           if (row.length >= 8) debtorName = row[7].toString();
+        }
+
         final details = detailsMap[saleId] ?? [];
         
         return Sale(

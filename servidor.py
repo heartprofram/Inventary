@@ -24,6 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 import uvicorn
 
 try:
@@ -192,9 +193,33 @@ async def get_productos():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/ventas")
-async def get_ventas():
+async def get_ventas(days: int = 30):
     try:
-        return await run_async(_sheets_get, 'Ventas!A2:H')
+        rows = await run_async(_sheets_get, 'Ventas!A2:H')
+        if days > 0:
+            cutoff = datetime.now() - timedelta(days=days)
+            filtered = []
+            for r in rows:
+                if len(r) > 1:
+                    try:
+                        r_date = datetime.fromisoformat(r[1].replace('Z', '+00:00'))
+                        if r_date.replace(tzinfo=None) >= cutoff:
+                            filtered.append(r)
+                    except:
+                        filtered.append(r)
+                else:
+                    filtered.append(r)
+            rows = filtered
+            
+        normalized = []
+        for r in rows:
+            # Recuperar columnas desplazadas por API de Google Sheets
+            if len(r) > 5 and str(r[5]).strip().startswith('['):
+                r.insert(5, "")
+            while len(r) < 8:
+                r.append("")
+            normalized.append(r[:8])
+        return normalized
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -227,9 +252,24 @@ async def get_ventas_pendientes():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/movimientos")
-async def get_movimientos():
+async def get_movimientos(days: int = 30):
     try:
-        return await run_async(_sheets_get, 'Movimientos!A2:F')
+        rows = await run_async(_sheets_get, 'Movimientos!A2:F')
+        if days > 0:
+            cutoff = datetime.now() - timedelta(days=days)
+            filtered = []
+            for r in rows:
+                if len(r) > 1:
+                    try:
+                        r_date = datetime.fromisoformat(r[1].replace('Z', '+00:00'))
+                        if r_date.replace(tzinfo=None) >= cutoff:
+                            filtered.append(r)
+                    except:
+                        filtered.append(r)
+                else:
+                    filtered.append(r)
+            return filtered
+        return rows
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -250,9 +290,9 @@ async def post_ventas(data: VentaRequest):
             data.venta.total_usd,
             data.venta.total_ves,
             data.venta.tasa_cambio,
-            data.venta.pdf_url,
+            data.venta.pdf_url if data.venta.pdf_url else " ",
             json.dumps(data.venta.metodos_pago),
-            data.venta.detalles
+            data.venta.detalles if data.venta.detalles else " "
         ]
         await run_async(_sheets_append, 'Ventas!A:H', [venta_row])
 

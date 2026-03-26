@@ -12,7 +12,6 @@ import 'package:inventary/features/sales/presentation/providers/sales_providers.
 import 'package:inventary/features/settings/presentation/providers/settings_provider.dart';
 
 final printInvoiceProvider = StateProvider<bool>((ref) => false);
-final debtorNameProvider = StateProvider<String>((ref) => '');
 
 class PosScreen extends ConsumerWidget {
   const PosScreen({super.key});
@@ -443,7 +442,7 @@ class PosScreen extends ConsumerWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        p.method,
+                        PaymentMethods.label(p.method),
                         style: const TextStyle(fontSize: 13),
                       ),
                     ),
@@ -515,7 +514,15 @@ class PosScreen extends ConsumerWidget {
                 color: Colors.green,
                 onPressed: isCartEmpty
                     ? null
-                    : () => _processDirectPayment(context, ref, 'Efectivo USD'),
+                    : () => _processDirectPayment(context, ref, PaymentMethods.efectivoUsd),
+              ),
+              _QuickPaymentButton(
+                label: 'EFECTIVO BS',
+                icon: Icons.money_off_csred_outlined,
+                color: Colors.indigo,
+                onPressed: isCartEmpty
+                    ? null
+                    : () => _processDirectPayment(context, ref, PaymentMethods.efectivoVes),
               ),
               _QuickPaymentButton(
                 label: 'PAGO MÓVIL',
@@ -523,7 +530,7 @@ class PosScreen extends ConsumerWidget {
                 color: Colors.blue,
                 onPressed: isCartEmpty
                     ? null
-                    : () => _processDirectPayment(context, ref, 'Pago Movil'),
+                    : () => _processDirectPayment(context, ref, PaymentMethods.pagoMovil),
               ),
               _QuickPaymentButton(
                 label: 'PUNTO',
@@ -532,7 +539,7 @@ class PosScreen extends ConsumerWidget {
                 onPressed: isCartEmpty
                     ? null
                     : () =>
-                          _processDirectPayment(context, ref, 'Punto de Venta'),
+                          _processDirectPayment(context, ref, PaymentMethods.puntoDeVenta),
               ),
               _QuickPaymentButton(
                 label: 'FIADO (PEND.)',
@@ -542,17 +549,15 @@ class PosScreen extends ConsumerWidget {
                     ? null
                     : () => _showQuickDebtorDialog(context, ref),
               ),
+              _QuickPaymentButton(
+                label: 'PAGO MIXTO',
+                icon: Icons.payments_outlined,
+                color: Colors.blueGrey,
+                onPressed: isCartEmpty
+                    ? null
+                    : () => _showAddPaymentDialog(context, ref),
+              ),
             ],
-          ),
-          const SizedBox(height: 8),
-          _QuickPaymentButton(
-            label: 'PAGO MIXTO / OTROS',
-            icon: Icons.payments_outlined,
-            color: Colors.blueGrey,
-            isFullWidth: true,
-            onPressed: isCartEmpty
-                ? null
-                : () => _showAddPaymentDialog(context, ref),
           ),
 
           if (payments.isNotEmpty && totalPaid == totalUSD) ...[
@@ -619,7 +624,7 @@ class PosScreen extends ConsumerWidget {
                 ref.read(paymentsProvider.notifier).clearPayments();
                 ref
                     .read(paymentsProvider.notifier)
-                    .addPayment(Payment(method: 'Pendiente', amount: totalUSD));
+                    .addPayment(Payment(method: PaymentMethods.pendiente, amount: totalUSD));
                 Navigator.pop(dialogCtx);
                 _processCheckout(screenContext, ref);
               } else {
@@ -702,175 +707,15 @@ class PosScreen extends ConsumerWidget {
   }
 
   void _showAddPaymentDialog(BuildContext screenContext, WidgetRef ref) {
-    final totalUSD = ref.read(cartProvider.notifier).totalCartUSD;
-    final totalPaid = ref.read(paymentsProvider.notifier).totalPaid;
-    final remainingUSD = totalUSD - totalPaid;
-
-    if (remainingUSD <= 0) return;
-
     showDialog(
       context: screenContext,
-      builder: (dialogCtx) {
-        String? debtorName;
-        bool isPending = false;
-
-        return StatefulBuilder(
-          builder: (stateCtx, setState) {
-            return AlertDialog(
-              title: const Text(
-                'Método de Pago',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Monto a cobrar: \$${remainingUSD.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      color: Colors.teal,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _PaymentTypeButton(
-                        label: 'Efectivo \$',
-                        icon: Icons.attach_money,
-                        color: Colors.green,
-                        onTap: () {
-                          ref
-                              .read(paymentsProvider.notifier)
-                              .addPayment(
-                                Payment(
-                                  method: 'Efectivo USD',
-                                  amount: remainingUSD,
-                                ),
-                              );
-                          Navigator.pop(dialogCtx);
-                        },
-                      ),
-                      _PaymentTypeButton(
-                        label: 'Pago Móvil',
-                        icon: Icons.phone_android,
-                        color: Colors.blue,
-                        onTap: () {
-                          ref
-                              .read(paymentsProvider.notifier)
-                              .addPayment(
-                                Payment(
-                                  method: 'Pago Movil',
-                                  amount: remainingUSD,
-                                ),
-                              );
-                          Navigator.pop(dialogCtx);
-                        },
-                      ),
-                      _PaymentTypeButton(
-                        label: 'Punto',
-                        icon: Icons.credit_card,
-                        color: Colors.orange,
-                        onTap: () {
-                          ref
-                              .read(paymentsProvider.notifier)
-                              .addPayment(
-                                Payment(
-                                  method: 'Punto de Venta',
-                                  amount: remainingUSD,
-                                ),
-                              );
-                          Navigator.pop(dialogCtx);
-                        },
-                      ),
-                      _PaymentTypeButton(
-                        label: 'Pendiente',
-                        icon: Icons.person_add_alt,
-                        color: Colors.redAccent,
-                        isOutline: !isPending,
-                        onTap: () {
-                          setState(() {
-                            isPending = true;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  if (isPending) ...[
-                    const SizedBox(height: 20),
-                    TextField(
-                      onChanged: (v) => debtorName = v,
-                      decoration: InputDecoration(
-                        labelText: 'Nombre del Cliente (Deudor)',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        prefixIcon: const Icon(Icons.person),
-                        fillColor: Colors.red.withOpacity(0.05),
-                        filled: true,
-                      ),
-                      autofocus: true,
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () {
-                          if (debtorName != null &&
-                              debtorName!.trim().isNotEmpty) {
-                            ref.read(debtorNameProvider.notifier).state =
-                                debtorName!;
-                            ref
-                                .read(paymentsProvider.notifier)
-                                .addPayment(
-                                  Payment(
-                                    method: 'Pendiente',
-                                    amount: remainingUSD,
-                                  ),
-                                );
-                            Navigator.pop(dialogCtx);
-                          } else {
-                            CustomSnackBar.warning(
-                              stateCtx,
-                              'El nombre del deudor es obligatorio.',
-                            );
-                          }
-                        },
-                        child: const Text(
-                          'Confirmar Deuda',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogCtx),
-                  child: const Text(
-                    'Cancelar',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+      barrierDismissible: false,
+      builder: (dialogCtx) => const _MixedPaymentDialog(),
+    ).then((confirmed) {
+      if (confirmed == true) {
+        _processCheckout(screenContext, ref);
+      }
+    });
   }
 
   void _showEditPriceDialog(BuildContext context, WidgetRef ref, dynamic item) {
@@ -1002,3 +847,208 @@ class _PaymentTypeButton extends StatelessWidget {
     );
   }
 }
+
+class _MixedPaymentDialog extends ConsumerStatefulWidget {
+  const _MixedPaymentDialog({super.key});
+
+  @override
+  ConsumerState<_MixedPaymentDialog> createState() => _MixedPaymentDialogState();
+}
+
+class _MixedPaymentDialogState extends ConsumerState<_MixedPaymentDialog> {
+  final Map<String, TextEditingController> _controllers = {};
+  String? _debtorName;
+
+  @override
+  void initState() {
+    super.initState();
+    final methods = [
+      PaymentMethods.efectivoUsd,
+      PaymentMethods.efectivoVes,
+      PaymentMethods.pagoMovil,
+      PaymentMethods.puntoDeVenta,
+      PaymentMethods.transferencia,
+      PaymentMethods.pendiente,
+    ];
+    for (var m in methods) {
+      _controllers[m] = TextEditingController();
+    }
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final existing = ref.read(paymentsProvider);
+      final rate = ref.read(exchangeRateProvider).value?.rate ?? 36.0;
+      for (var p in existing) {
+        if (_controllers.containsKey(p.method)) {
+          bool isBs = _isBolivaresMethod(p.method);
+          final val = isBs ? p.amount * rate : p.amount;
+          _controllers[p.method]!.text = val.toStringAsFixed(2);
+        }
+      }
+      if (existing.any((p) => p.method == PaymentMethods.pendiente)) {
+         _debtorName = ref.read(debtorNameProvider);
+      }
+      setState((){});
+    });
+  }
+
+  @override
+  void dispose() {
+    for (var c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  bool _isBolivaresMethod(String method) {
+    return [
+      PaymentMethods.efectivoVes,
+      PaymentMethods.pagoMovil,
+      PaymentMethods.puntoDeVenta,
+      PaymentMethods.transferencia,
+    ].contains(method);
+  }
+
+  double _calculateInputUSD(double exchangeRate) {
+    double total = 0.0;
+    _controllers.forEach((method, controller) {
+      final val = double.tryParse(controller.text.replaceAll(',', '.')) ?? 0;
+      if (val > 0) {
+        total += _isBolivaresMethod(method) ? val / exchangeRate : val;
+      }
+    });
+    return total;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalUSD = ref.read(cartProvider.notifier).totalCartUSD;
+    final exchangeRate = ref.read(exchangeRateProvider).value?.rate ?? 36.0;
+    
+    final inputUSD = _calculateInputUSD(exchangeRate);
+    final remainingUSD = totalUSD - inputUSD;
+    final isCovered = remainingUSD <= 0.01;
+
+    return AlertDialog(
+      title: const Text('Pagos Mixtos Simultáneos', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+      contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: isCovered ? Colors.green.withOpacity(0.05) : Colors.teal.withOpacity(0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: isCovered ? Colors.green.withOpacity(0.3) : Colors.teal.withOpacity(0.3))),
+                child: Column(
+                  children: [
+                    Text(isCovered ? 'Cobro Completo' : 'Falta por Pagar', style: TextStyle(color: isCovered ? Colors.green : Colors.teal, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text('\$${remainingUSD > 0 ? remainingUSD.toStringAsFixed(2) : "0.00"}', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isCovered ? Colors.green : Colors.teal)),
+                    if (remainingUSD > 0)
+                      Text('Bs. ${(remainingUSD * exchangeRate).toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              ..._controllers.entries.map((entry) {
+                final method = entry.key;
+                final isBs = _isBolivaresMethod(method);
+                final controller = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Text(PaymentMethods.label(method), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: controller,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          onChanged: (_) => setState((){}),
+                          decoration: InputDecoration(
+                            labelText: isBs ? 'Bs' : '\$',
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            isDense: true,
+                            suffixIcon: remainingUSD > 0 ? IconButton(
+                              icon: const Icon(Icons.flash_on, color: Colors.amber),
+                              tooltip: 'Autocompletar faltante',
+                              onPressed: () {
+                                final currentTxt = controller.text.replaceAll(',', '.');
+                                final current = double.tryParse(currentTxt) ?? 0;
+                                final suggestUSD = remainingUSD + (isBs ? current / exchangeRate : current);
+                                final suggestLocal = isBs ? suggestUSD * exchangeRate : suggestUSD;
+                                controller.text = suggestLocal.toStringAsFixed(2);
+                                setState((){});
+                              },
+                            ) : null,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              
+              if ((double.tryParse(_controllers[PaymentMethods.pendiente]!.text.replaceAll(',', '.')) ?? 0) > 0) ...[
+                const Divider(),
+                TextField(
+                  onChanged: (v) => _debtorName = v,
+                  controller: TextEditingController(text: _debtorName),
+                  decoration: InputDecoration(
+                    labelText: 'Nombre del Deudor / Cliente',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    prefixIcon: const Icon(Icons.person_outline),
+                    errorText: (_debtorName == null || _debtorName!.trim().isEmpty) ? 'Requerido para fiar' : null,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+        ),
+        ElevatedButton(
+          onPressed: !isCovered ? null : () {
+            final pendAmount = double.tryParse(_controllers[PaymentMethods.pendiente]!.text.replaceAll(',', '.')) ?? 0;
+            if (pendAmount > 0 && (_debtorName == null || _debtorName!.trim().isEmpty)) {
+              CustomSnackBar.warning(context, 'Ingresa el nombre del deudor porque hay un monto fiado.');
+              return;
+            }
+            
+            // Apply all payments to provider
+            ref.read(paymentsProvider.notifier).clearPayments();
+            _controllers.forEach((method, controller) {
+              final val = double.tryParse(controller.text.replaceAll(',', '.')) ?? 0;
+              if (val > 0) {
+                final usdVal = _isBolivaresMethod(method) ? val / exchangeRate : val;
+                ref.read(paymentsProvider.notifier).addPayment(Payment(method: method, amount: usdVal));
+              }
+            });
+            
+            if (pendAmount > 0) {
+              ref.read(debtorNameProvider.notifier).state = _debtorName!;
+            }
+            
+            Navigator.pop(context, true);
+          },
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+          child: const Text('Confirmar Venta'),
+        ),
+      ],
+    );
+  }
+}
+
+

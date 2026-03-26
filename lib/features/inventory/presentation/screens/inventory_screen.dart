@@ -298,6 +298,9 @@ class InventoryScreen extends ConsumerWidget {
 
     Navigator.pop(context); // Cerrar diálogo inicial
     
+    // Capturar NavigatorState antes del modo asíncrono para garantizar el cierre
+    final navigator = Navigator.of(context, rootNavigator: true);
+
     // Diálogo de carga
     showDialog(
       context: context,
@@ -345,10 +348,8 @@ class InventoryScreen extends ConsumerWidget {
         CustomSnackBar.error(context, 'Error al procesar surtido: $e');
       }
     } finally {
-      if (context.mounted) {
-        // Cerrar carga usando rootNavigator para evitar conflictos de contexto
-        Navigator.of(context, rootNavigator: true).pop();
-      }
+      // Cerrar carga usando la referencia del navigator de forma incondicional
+      navigator.pop();
     }
   }
 

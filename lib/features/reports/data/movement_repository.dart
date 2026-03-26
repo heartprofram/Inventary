@@ -18,12 +18,12 @@ class MovementRepository {
     required this.localStorageService,
   });
 
-  Future<List<Movement>> getMovements() async {
+  Future<List<Movement>> getMovements({int days = 30}) async {
     try {
       List<dynamic> rows;
       
       if (kIsWeb) {
-        final response = await dio.get('$baseUrl/movimientos');
+        final response = await dio.get('$baseUrl/movimientos', queryParameters: {'days': days});
         rows = response.data ?? [];
       } else {
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
@@ -31,6 +31,19 @@ class MovementRepository {
           'Movimientos!A2:F',
         );
         rows = response.values ?? [];
+        
+        if (days > 0) {
+          final cutoffDate = DateTime.now().subtract(Duration(days: days));
+          rows = rows.where((row) {
+            if (row.length < 2) return false;
+            try {
+              final date = DateTime.parse(row[1].toString());
+              return date.isAfter(cutoffDate) || date.isAtSameMomentAs(cutoffDate);
+            } catch (_) {
+              return true;
+            }
+          }).toList();
+        }
       }
       
       return rows.where((row) => row.length >= 6).map((row) {

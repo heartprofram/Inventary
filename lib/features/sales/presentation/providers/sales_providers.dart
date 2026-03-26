@@ -76,6 +76,26 @@ final checkoutProvider = AsyncNotifierProvider<CheckoutNotifier, void>(() {
   return CheckoutNotifier();
 });
 
+// Providers para manejar el historial de ventas
+final salesHistoryDaysProvider = StateProvider<int>((ref) => 30);
+
+final salesHistoryProvider = AsyncNotifierProvider<SalesHistoryNotifier, List<Sale>>(() {
+  return SalesHistoryNotifier();
+});
+
+class SalesHistoryNotifier extends AsyncNotifier<List<Sale>> {
+  @override
+  Future<List<Sale>> build() async {
+    final days = ref.watch(salesHistoryDaysProvider);
+    final repo = ref.watch(salesRepositoryProvider);
+    return await repo.getSalesHistory(days: days);
+  }
+
+  void loadAllHistory() {
+    ref.read(salesHistoryDaysProvider.notifier).state = 0;
+  }
+}
+
 // Provider para el término de búsqueda
 final searchQueryProvider = StateProvider<String>((ref) => '');
 

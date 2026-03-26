@@ -32,21 +32,38 @@ class _MovementsScreenState extends ConsumerState<MovementsScreen> {
       ),
       body: movementsAsync.when(
         data: (movements) {
+          final days = ref.watch(movementsDaysProvider);
           if (movements.isEmpty) {
             return EmptyState(
               icon: Icons.swap_horiz_outlined,
               title: 'Sin movimientos',
-              message: 'Aquí aparecerán tus ingresos y egresos de caja manuales.',
-              onAction: () => _showAddMovementDialog(context, ref),
-              actionLabel: 'Nuevo Movimiento',
+              message: days > 0 
+                ? 'No hay movimientos en los últimos $days días.'
+                : 'Aquí aparecerán tus ingresos y egresos de caja manuales.',
+              onAction: days > 0 ? () => ref.read(movementsProvider.notifier).loadAllHistory() : () => _showAddMovementDialog(context, ref),
+              actionLabel: days > 0 ? 'Cargar Histórico Completo' : 'Nuevo Movimiento',
             );
           }
           final reversedList = movements.reversed.toList();
           return ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: reversedList.length,
+            itemCount: reversedList.length + (days > 0 ? 1 : 0),
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
+              if (index == reversedList.length && days > 0) {
+                 return Padding(
+                   padding: const EdgeInsets.symmetric(vertical: 24),
+                   child: OutlinedButton.icon(
+                     onPressed: () => ref.read(movementsProvider.notifier).loadAllHistory(),
+                     icon: const Icon(Icons.history),
+                     label: const Text('Mostrando últimos 30 días. Cargar histórico completo.'),
+                     style: OutlinedButton.styleFrom(
+                       padding: const EdgeInsets.all(16),
+                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                     ),
+                   ),
+                 );
+              }
               final m = reversedList[index];
               final isIncome = m.type == 'Ingreso';
               return Card(

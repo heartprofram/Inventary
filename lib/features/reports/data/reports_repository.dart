@@ -39,15 +39,15 @@ class ReportsRepository {
           
           // Solo tomar las ventas que coincidan con la fecha de hoy
           if (dateStr.startsWith(todayStr)) {
-            final totalUSD = double.tryParse(row[2].toString()) ?? 0.0;
+            final totalUSD = double.tryParse(row[2].toString().replaceAll(',', '.')) ?? 0.0;
             
             List<Payment> parsedPayments = [];
-            if (row.length >= 6 && row[5].toString().isNotEmpty) {
+            if (row.length >= 7 && row[6].toString().isNotEmpty) {
                try {
-                 final List<dynamic> pmList = jsonDecode(row[5].toString());
+                 final List<dynamic> pmList = jsonDecode(row[6].toString());
                  parsedPayments = pmList.map((p) => Payment(method: p['method'], amount: (p['amount'] as num).toDouble())).toList();
                } catch(e) {
-                 parsedPayments = [Payment(method: row[5].toString(), amount: totalUSD)];
+                 parsedPayments = [Payment(method: row[6].toString(), amount: totalUSD)];
                }
             } else {
                parsedPayments = [Payment(method: 'Efectivo', amount: totalUSD)];
@@ -56,12 +56,12 @@ class ReportsRepository {
             final sale = Sale(
               id: row[0].toString(),
               date: DateTime.parse(dateStr),
-              exchangeRate: double.tryParse(row[4].toString()) ?? 0.0,
+              exchangeRate: double.tryParse(row[4].toString().replaceAll(',', '.')) ?? 0.0,
               details: [], // El reporte diario no necesita el detalle completo de los productos
               payments: parsedPayments,
             )..overrideTotals(
                 totalUSD,
-                double.tryParse(row[3].toString()) ?? 0.0,
+                double.tryParse(row[3].toString().replaceAll(',', '.')) ?? 0.0,
               );
             dailySales.add(sale);
           }

@@ -64,15 +64,20 @@ class ReportsScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
                 ...metrics.paymentsUSD.entries.map((entry) {
                   final vesVal = metrics.paymentsVES[entry.key] ?? 0.0;
+                  final isBolivares = entry.key.toLowerCase().contains('bs');
                   return Card(
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey[200]!)),
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
-                      leading: const CircleAvatar(backgroundColor: Colors.teal, foregroundColor: Colors.white, child: Icon(Icons.payment, size: 20)),
+                      leading: CircleAvatar(backgroundColor: isBolivares ? Colors.indigo : Colors.teal, foregroundColor: Colors.white, child: const Icon(Icons.payment, size: 20)),
                       title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Equivalente Bs. ${vesVal.toStringAsFixed(2)}'),
-                      trailing: Text('\$${entry.value.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                      subtitle: Text('Dólares: \$${entry.value.toStringAsFixed(2)}\nBolívares: Bs. ${vesVal.toStringAsFixed(2)}', style: const TextStyle(height: 1.5)),
+                      trailing: Text(
+                        isBolivares ? 'Bs. ${vesVal.toStringAsFixed(2)}' : '\$${entry.value.toStringAsFixed(2)}',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isBolivares ? Colors.indigo : Colors.green),
+                      ),
+                      isThreeLine: true,
                     ),
                   );
                 }),

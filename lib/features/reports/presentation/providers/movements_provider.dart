@@ -4,10 +4,17 @@ import '../../../../core/providers/core_providers.dart';
 
 // El repository provider ahora se encuentra en core_providers.dart
 
+final movementsDaysProvider = StateProvider<int>((ref) => 30);
+
 class MovementsNotifier extends AsyncNotifier<List<Movement>> {
   @override
   Future<List<Movement>> build() async {
-    return ref.watch(movementRepositoryProvider).getMovements();
+    final days = ref.watch(movementsDaysProvider);
+    return await ref.watch(movementRepositoryProvider).getMovements(days: days);
+  }
+
+  void loadAllHistory() {
+    ref.read(movementsDaysProvider.notifier).state = 0;
   }
 
   Future<bool> addMovement(Movement movement) async {

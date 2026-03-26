@@ -347,7 +347,7 @@ class PdfInvoiceGenerator {
                   )),
                 ]),
                 pw.SizedBox(height: 4),
-                pw.Center(child: pw.Text('⚠  PAGO PENDIENTE', style: pw.TextStyle(
+                pw.Center(child: pw.Text('!  PAGO PENDIENTE', style: pw.TextStyle(
                   fontSize: 10, fontWeight: pw.FontWeight.bold, color: _kWarning,
                 ))),
               ]),
@@ -376,10 +376,12 @@ class PdfInvoiceGenerator {
     final fmt = DateFormat('dd/MM/yyyy  HH:mm');
 
     // ── Calcular resúmenes de pago por método ──────────────────────────────
-    final Map<String, double> paymentTotals = {};
+    final Map<String, double> paymentTotalsUSD = {};
+    final Map<String, double> paymentTotalsVES = {};
     for (final sale in sales) {
       for (final p in sale.payments) {
-        paymentTotals[p.method] = (paymentTotals[p.method] ?? 0) + p.amount;
+        paymentTotalsUSD[p.method] = (paymentTotalsUSD[p.method] ?? 0) + p.amount;
+        paymentTotalsVES[p.method] = (paymentTotalsVES[p.method] ?? 0) + (p.amount * sale.exchangeRate);
       }
     }
 
@@ -411,7 +413,7 @@ class PdfInvoiceGenerator {
             pw.Container(
               color: _kGrey100,
               padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 5),
-              child: pw.Text('▸  RESUMEN DE VENTAS', style: _h3(color: _kPrimary)),
+              child: pw.Text('>  RESUMEN DE VENTAS', style: _h3(color: _kPrimary)),
             ),
             pw.SizedBox(height: 4),
 
@@ -452,13 +454,31 @@ class PdfInvoiceGenerator {
             pw.Container(
               color: _kGrey100,
               padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 5),
-              child: pw.Text('▸  RESUMEN POR MÉTODO DE PAGO', style: _h3(color: _kPrimary)),
+              child: pw.Text('>  RESUMEN POR MÉTODO DE PAGO', style: _h3(color: _kPrimary)),
             ),
             pw.SizedBox(height: 4),
-            ...paymentTotals.entries.map((e) => _kv(
-              '• ${e.key}:', '\$${e.value.toStringAsFixed(2)}',
-              bold: true, size: 8.5, valueColor: _kSuccess,
-            )),
+            ...paymentTotalsUSD.entries.expand((e) {
+              final vesVal = paymentTotalsVES[e.key] ?? 0.0;
+              return [
+                pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('• ${PaymentMethods.label(e.key)}:', style: _body(color: _kGrey600, size: 8.5)),
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text('\$${e.value.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: _kSuccess)),
+                          pw.Text('Bs. ${vesVal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: _kAccent)),
+                        ]
+                      )
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 2),
+              ];
+            }),
 
             pw.SizedBox(height: 8),
             _divider(color: _kAccent),

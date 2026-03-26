@@ -7,6 +7,7 @@ import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/custom_snackbar.dart';
 import '../../../../core/utils/pdf_invoice_generator.dart';
 import '../../domain/sale.dart';
+import '../providers/sales_providers.dart';
 import 'package:intl/intl.dart';
 
 class SalesHistoryScreen extends ConsumerStatefulWidget {
@@ -25,7 +26,8 @@ class _SalesHistoryScreenState extends ConsumerState<SalesHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final salesRepo = ref.watch(salesRepositoryProvider);
+    final salesAsync = ref.watch(salesHistoryProvider);
+    final days = ref.watch(salesHistoryDaysProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -41,35 +43,50 @@ class _SalesHistoryScreenState extends ConsumerState<SalesHistoryScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<Sale>>(
-        future: salesRepo.getSalesHistory(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const ShimmerList(itemCount: 8);
-          }
-          if (snapshot.hasError) {
-            return EmptyState(icon: Icons.error_outline, title: 'Error', message: snapshot.error.toString());
-          }
-
-          _cachedSales = snapshot.data ?? [];
-
-          if (_cachedSales.isEmpty) {
+      body: salesAsync.when(
+        loading: () => const ShimmerList(itemCount: 8),
+        error: (err, stack) => EmptyState(icon: Icons.error_outline, title: 'Error', message: err.toString()),
+        data: (sales) {
+          // Delaying state update to avoid during build
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _cachedSales.length != sales.length) {
+               setState(() => _cachedSales = sales);
+            }
+          });
+          
+          if (sales.isEmpty) {
             return EmptyState(
               icon: Icons.receipt_long_outlined,
               title: 'Historial vacío',
-              message: 'Aún no se han completado ventas en el sistema.',
-              onAction: _refresh,
-              actionLabel: 'Refrescar',
+              message: days > 0 
+                ? 'No hay ventas en los últimos $days días.'
+                : 'Aún no se han completado ventas en el sistema.',
+              onAction: days > 0 ? () => ref.read(salesHistoryProvider.notifier).loadAllHistory() : _refresh,
+              actionLabel: days > 0 ? 'Cargar Histórico Completo' : 'Refrescar',
             );
           }
 
           return ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: _cachedSales.length,
+            itemCount: sales.length + (days > 0 ? 1 : 0),
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final sale = _cachedSales[index];
-              return _SaleCard(sale: sale, onRefresh: _refresh);
+              if (index == sales.length && days > 0) {
+                 return Padding(
+                   padding: const EdgeInsets.symmetric(vertical: 24),
+                   child: OutlinedButton.icon(
+                     onPressed: () => ref.read(salesHistoryProvider.notifier).loadAllHistory(),
+                     icon: const Icon(Icons.history),
+                     label: const Text('Mostrando últimos 30 días. Cargar histórico completo.'),
+                     style: OutlinedButton.styleFrom(
+                       padding: const EdgeInsets.all(16),
+                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                     ),
+                   ),
+                 );
+              }
+              final sale = sales[index];
+              return _SaleCard(sale: sale, onRefresh: () => ref.refresh(salesHistoryProvider));
             },
           );
         },
@@ -124,11 +141,11 @@ class _SalesHistoryScreenState extends ConsumerState<SalesHistoryScreen> {
       periodName = 'Ayer';
       final yesterday = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
       final today = DateTime(now.year, now.month, now.day);
-      filteredSales = _cachedSales.where((s) => s.date.isAfter(yesterday) && s.date.isBefore(today)).toList();
+      filteredSales = _cachedSales.where((s) => s.date.compareTo(yesterday) >= 0 && s.date.compareTo(today) < 0).toList();
     } else if (period == 'semana') {
       periodName = 'Esta Semana';
-      final lastWeek = now.subtract(const Duration(days: 7));
-      filteredSales = _cachedSales.where((s) => s.date.isAfter(lastWeek)).toList();
+      final lastWeek = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
+      filteredSales = _cachedSales.where((s) => s.date.compareTo(lastWeek) >= 0).toList();
     } else if (period == 'mes') {
       periodName = 'Este Mes';
       filteredSales = _cachedSales.where((s) => s.date.month == now.month && s.date.year == now.year).toList();

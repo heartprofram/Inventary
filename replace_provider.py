@@ -1,11 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:inventary/core/providers/core_providers.dart';
-import 'package:inventary/features/sales/domain/sale.dart';
-import 'package:inventary/features/sales/presentation/providers/cart_provider.dart';
-import 'package:inventary/features/sales/presentation/providers/payment_provider.dart';
-import 'package:inventary/features/sales/domain/entities/payment.dart';
+import sys
 
-class PendingPayment {
+file_path = "lib/features/sales/presentation/providers/pending_payments_provider.dart"
+with open(file_path, "r", encoding="utf-8") as f:
+    lines = f.readlines()
+
+new_class = """class PendingPayment {
   final String idVenta;
   final String fecha;
   final double totalUsd;
@@ -42,25 +41,11 @@ class PendingPayment {
     );
   }
 }
+"""
 
-final pendingPaymentsProvider = AsyncNotifierProvider<PendingPaymentsNotifier, List<PendingPayment>>(
-  PendingPaymentsNotifier.new,
-);
-
-class PendingPaymentsNotifier extends AsyncNotifier<List<PendingPayment>> {
-  @override
-  Future<List<PendingPayment>> build() async {
-    return [];
-  }
-
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _fetchPending());
-  }
-
-  Future<List<PendingPayment>> _fetchPending() async {
+new_fetch = """  Future<List<PendingPayment>> _fetchPending() async {
     final salesRepo = ref.read(salesRepositoryProvider);
-    final allSales = await salesRepo.getSalesHistory(days: 0);
+    final allSales = await salesRepo.getSalesHistory();
     
     final pendingSales = allSales.where((sale) {
       return sale.payments.any((p) => p.method == PaymentMethods.pendiente);
@@ -86,23 +71,32 @@ class PendingPaymentsNotifier extends AsyncNotifier<List<PendingPayment>> {
       );
     }).toList();
   }
+"""
 
-  Future<void> processPendingPayment(PendingPayment pending, WidgetRef ref, double currentRate) async {
-    final sale = pending.toSale(currentRate);
-    
-    ref.read(cartProvider.notifier).clear();
-    ref.read(paymentsProvider.notifier).clearPayments();
-    
-    for (var detail in sale.details) {
-      ref.read(cartProvider.notifier).addProductByDetail(detail);
-    }
-    
-    ref.read(debtorNameProvider.notifier).state = pending.deudor;
-  }
+# Replace PendingPayment class
+# Find class start and end
+class_start = -1
+class_end = -1
+for i, line in enumerate(lines):
+    if line.startswith("class PendingPayment {"):
+        class_start = i
+    if line.startswith("}") and class_start != -1 and class_end == -1:
+        if i > class_start + 10:
+            class_end = i
+            break
 
-  Future<void> updatePendingStatus(String idVenta, List<Payment> payments) async {
-    final salesRepo = ref.read(salesRepositoryProvider);
-    await salesRepo.updateSaleStatus(idVenta, payments);
-    await refresh();
-  }
-}
+lines1 = lines[:class_start] + [new_class] + lines[class_end+1:]
+
+fetch_start = -1
+fetch_end = -1
+for i, line in enumerate(lines1):
+    if line.startswith("  Future<List<PendingPayment>> _fetchPending() async {"):
+        fetch_start = i
+    if line.startswith("  Future<void> processPendingPayment") and fetch_start != -1:
+        fetch_end = i
+        break
+
+lines2 = lines1[:fetch_start] + [new_fetch, "\n"] + lines1[fetch_end:]
+
+with open(file_path, "w", encoding="utf-8") as f:
+    f.writelines(lines2)
