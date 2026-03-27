@@ -28,13 +28,10 @@ class InventoryNotifier extends AsyncNotifier<List<Product>> {
     }
   }
 
-  // Obtener Valor Total del Inventario
-  double get totalInventoryValueVES {
-    // Calculamos asumiendo que ya hay data (estado es data)
+  // Obtener Valor Total del Inventario de Venta (USD)
+  double get totalInventoryValueSaleUSD {
     final products = state.valueOrNull ?? [];
-    // En el futuro inyectaremos el ExchangeRateProvider aquí para calcular a VES
-    // Por ahora sumamos solo el costo USD para demostrar la reactividad
-    return products.fold(0.0, (sum, item) => sum + (item.costPriceUSD * item.stockQuantity));
+    return products.fold(0.0, (sum, item) => sum + (item.salePriceUSD * item.stockQuantity));
   }
 }
 

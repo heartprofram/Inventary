@@ -21,10 +21,17 @@ class InventoryScreen extends ConsumerWidget {
     final inventoryState = ref.watch(inventoryProvider);
     final searchQuery = ref.watch(inventorySearchQueryProvider);
 
+    // Calcular Valor Total de Venta (USD)
+    final totalSalesValue = inventoryState.when(
+      data: (products) => products.fold<double>(0, (sum, p) => sum + (p.salePriceUSD * p.stockQuantity)),
+      loading: () => 0.0,
+      error: (_, __) => 0.0,
+    );
+
     return Scaffold(
       body: Column(
         children: [
-          _buildInventoryHeader(context, ref),
+          _buildInventoryHeader(context, ref, totalSalesValue),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: SearchBar(
@@ -146,7 +153,7 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildInventoryHeader(BuildContext context, WidgetRef ref) {
+  Widget _buildInventoryHeader(BuildContext context, WidgetRef ref, double totalValue) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -159,10 +166,10 @@ class InventoryScreen extends ConsumerWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Valor del Inventario', style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+              const Text('Valor Total de Venta', style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(
-                '\$${ref.read(inventoryProvider.notifier).totalInventoryValueVES.toStringAsFixed(2)}',
+                '\$ ${totalValue.toStringAsFixed(2)}',
                 style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.teal),
               ),
             ],

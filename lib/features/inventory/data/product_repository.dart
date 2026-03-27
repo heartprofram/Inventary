@@ -1,5 +1,6 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:dio/dio.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:googleapis/sheets/v4.dart' as sheets;
 import '../../../core/services/google_api_service.dart';
 import '../../../core/constants/app_constants.dart';
@@ -13,20 +14,31 @@ class ProductRepository {
   ProductRepository({required this.dio, required this.googleApi});
 
   Future<List<Product>> getProducts() async {
+    List<dynamic> rows = [];
+    final box = Hive.box('inventory_box');
+
     try {
-      List<dynamic> rows;
-      
       if (kIsWeb) {
-        final response = await dio.get('$baseUrl/productos');
+        final response = await dio.get('$baseUrl/productos')
+            .timeout(const Duration(seconds: 4));
         rows = response.data ?? [];
       } else {
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
           AppConstants.spreadSheetId,
           'Productos!A2:G',
-        );
+        ).timeout(const Duration(seconds: 5)); // Un poco más para Google Sheets
         rows = response.values ?? [];
       }
       
+      // Si la red fue exitosa, actualizamos el caché local
+      await box.put('products_cache', rows);
+    } catch (networkError) {
+      debugPrint('[Offline] Error de red en ${kIsWeb ? 'Web' : 'Android'}, cargando caché: $networkError');
+      // CARGA OFFLINE: Recuperar los últimos datos guardados en Hive
+      rows = box.get('products_cache', defaultValue: []) as List<dynamic>;
+    }
+
+    try {
       return rows.where((row) => row.length >= 6).map((row) {
         return Product(
           id: row[0].toString(),
@@ -39,7 +51,7 @@ class ProductRepository {
         );
       }).toList();
     } catch (e) {
-      throw Exception('Error al obtener productos: $e');
+      throw Exception('Error al procesar datos de productos: $e');
     }
   }
 

@@ -11,8 +11,15 @@ import 'package:inventary/features/reports/presentation/screens/movements_screen
 import 'package:inventary/features/sales/presentation/screens/sales_history_screen.dart';
 import 'package:inventary/features/sales/presentation/screens/pending_payments_screen.dart';
 
+import 'package:hive_flutter/hive_flutter.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 1. Inicializar Hive para soporte PWA offline
+  await Hive.initFlutter();
+  await Hive.openBox('inventory_box');
+  await Hive.openBox('sales_queue'); 
   
   final googleApi = GoogleApiService();
   await googleApi.init();

@@ -1,22 +1,24 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
-/// Servicio de Cola de Sincronización Local.
+/// Servicio de Cola de Sincronización Local (Migrado a Hive para soporte PWA robusto).
 /// 
 /// Almacena ventas y movimientos que fallaron al enviarse a la red,
 /// para reintentarlos cuando la conexión se restaure.
 class LocalStorageService {
-  static const _pendingSalesKey = 'pending_sales_queue';
-  static const _pendingMovementsKey = 'pending_movements_queue';
+  static const String _salesBoxName = 'sales_queue';
+  static const String _movementsBoxName = 'movements_queue';
 
   // ─── Ventas Pendientes ────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getPendingSales() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getStringList(_pendingSalesKey) ?? [];
-      return raw.map((e) => jsonDecode(e) as Map<String, dynamic>).toList();
+      final box = Hive.box(_salesBoxName);
+      return box.values.map((e) {
+        if (e is String) return jsonDecode(e) as Map<String, dynamic>;
+        return Map<String, dynamic>.from(e as Map);
+      }).toList();
     } catch (e) {
       debugPrint('[LocalStorage] Error leyendo ventas pendientes: $e');
       return [];
@@ -25,28 +27,22 @@ class LocalStorageService {
 
   Future<void> addPendingSale(Map<String, dynamic> saleJson) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getStringList(_pendingSalesKey) ?? [];
-      raw.add(jsonEncode(saleJson));
-      await prefs.setStringList(_pendingSalesKey, raw);
-      debugPrint('[OfflineQueue] Venta guardada en cola: ${saleJson['id_venta']}');
+      final box = Hive.box(_salesBoxName);
+      // Usamos el ID de la venta como llave para evitar duplicados
+      await box.put(saleJson['id_venta'], saleJson);
+      debugPrint('[OfflineQueue] Venta guardada en Hive: ${saleJson['id_venta']}');
     } catch (e) {
-      debugPrint('[LocalStorage] Error guardando venta pendiente: $e');
+      debugPrint('[LocalStorage] Error guardando venta en Hive: $e');
     }
   }
 
   Future<void> removePendingSale(String idVenta) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getStringList(_pendingSalesKey) ?? [];
-      raw.removeWhere((e) {
-        final map = jsonDecode(e) as Map<String, dynamic>;
-        return map['id_venta'] == idVenta;
-      });
-      await prefs.setStringList(_pendingSalesKey, raw);
-      debugPrint('[OfflineQueue] Venta sincronizada y removida: $idVenta');
+      final box = Hive.box(_salesBoxName);
+      await box.delete(idVenta);
+      debugPrint('[OfflineQueue] Venta removida de Hive: $idVenta');
     } catch (e) {
-      debugPrint('[LocalStorage] Error removiendo venta pendiente: $e');
+      debugPrint('[LocalStorage] Error removiendo venta de Hive: $e');
     }
   }
 
@@ -54,53 +50,55 @@ class LocalStorageService {
 
   Future<List<Map<String, dynamic>>> getPendingMovements() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getStringList(_pendingMovementsKey) ?? [];
-      return raw.map((e) => jsonDecode(e) as Map<String, dynamic>).toList();
+      final box = await _getMovementBox();
+      return box.values.map((e) {
+        if (e is String) return jsonDecode(e) as Map<String, dynamic>;
+        return Map<String, dynamic>.from(e as Map);
+      }).toList();
     } catch (e) {
-      debugPrint('[LocalStorage] Error leyendo movimientos pendientes: $e');
+      debugPrint('[LocalStorage] Error leyendo movimientos: $e');
       return [];
     }
   }
 
   Future<void> addPendingMovement(Map<String, dynamic> movementJson) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getStringList(_pendingMovementsKey) ?? [];
-      raw.add(jsonEncode(movementJson));
-      await prefs.setStringList(_pendingMovementsKey, raw);
-      debugPrint('[OfflineQueue] Movimiento guardado en cola: ${movementJson['id']}');
+      final box = await _getMovementBox();
+      await box.put(movementJson['id'], movementJson);
     } catch (e) {
-      debugPrint('[LocalStorage] Error guardando movimiento pendiente: $e');
+      debugPrint('[LocalStorage] Error guardando movimiento: $e');
     }
   }
 
   Future<void> removePendingMovement(String id) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getStringList(_pendingMovementsKey) ?? [];
-      raw.removeWhere((e) {
-        final map = jsonDecode(e) as Map<String, dynamic>;
-        return map['id'] == id;
-      });
-      await prefs.setStringList(_pendingMovementsKey, raw);
-      debugPrint('[OfflineQueue] Movimiento sincronizado y removido: $id');
+      final box = await _getMovementBox();
+      await box.delete(id);
     } catch (e) {
-      debugPrint('[LocalStorage] Error removiendo movimiento pendiente: $e');
+      debugPrint('[LocalStorage] Error removiendo movimiento: $e');
     }
+  }
+
+  // Helper para asegurar que la caja esté abierta (Movements no se abrió en main)
+  Future<Box> _getMovementBox() async {
+    if (!Hive.isBoxOpen(_movementsBoxName)) {
+      return await Hive.openBox(_movementsBoxName);
+    }
+    return Hive.box(_movementsBoxName);
   }
 
   // ─── Contadores ──────────────────────────────────────────────────────────
 
   Future<int> getPendingCount() async {
-    final sales = await getPendingSales();
-    final movements = await getPendingMovements();
-    return sales.length + movements.length;
+    final salesBox = Hive.box(_salesBoxName);
+    final movBox = await _getMovementBox();
+    return salesBox.length + movBox.length;
   }
 
   Future<void> clearAll() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_pendingSalesKey);
-    await prefs.remove(_pendingMovementsKey);
+    final salesBox = Hive.box(_salesBoxName);
+    final movBox = await _getMovementBox();
+    await salesBox.clear();
+    await movBox.clear();
   }
 }
