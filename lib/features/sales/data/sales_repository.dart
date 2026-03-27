@@ -25,18 +25,7 @@ class SalesRepository {
 
   Future<void> processSale(Sale sale) async {
     try {
-      // 1. Descontar inventario (el repositorio de productos ya maneja kIsWeb internamente)
-      for (final detail in sale.details) {
-        final products = await productRepository.getProducts();
-        final idx = products.indexWhere((p) => p.id == detail.productId);
-        if (idx >= 0) {
-          final currentStock = products[idx].stockQuantity;
-          final newStock = (currentStock - detail.quantity).clamp(0, 999999);
-          await productRepository.updateStock(detail.productId, newStock);
-        }
-      }
-
-      // 2. Preparar los datos
+      // 1. Preparar los datos
       final ventaRow = [
         sale.id,
         sale.date.toIso8601String(),
@@ -57,11 +46,27 @@ class SalesRepository {
         d.subtotalUSD
       ]).toList();
 
-      // 3. Enviar a Google Sheets (con fallback offline)
+      // 2. Enviar a Google Sheets (con fallback offline)
       await _sendSaleToNetwork(sale, ventaRow, detallesRows);
     } catch (e) {
-      // Error de stock u otro error crítico (no de red)
+      // Error crítico
       throw Exception('Error al procesar la venta: $e');
+    }
+  }
+
+  Future<void> _deductStock(List<SaleDetail> details) async {
+    try {
+      final products = await productRepository.getProducts();
+      for (final detail in details) {
+        final idx = products.indexWhere((p) => p.id == detail.productId);
+        if (idx >= 0) {
+          final currentStock = products[idx].stockQuantity;
+          final newStock = (currentStock - detail.quantity).clamp(0, 999999);
+          await productRepository.updateStock(detail.productId, newStock);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error al descontar stock: $e');
     }
   }
 
@@ -108,6 +113,8 @@ class SalesRepository {
           valueInputOption: 'USER_ENTERED',
         );
       }
+      // Si llegamos aquí, la red funcionó. Descontamos stock al final.
+      await _deductStock(sale.details);
     } catch (networkError) {
       // Fallo de red → guardar en cola offline
       debugPrint('[SalesRepo] Error de red, guardando en modo offline: $networkError');
@@ -194,6 +201,24 @@ class SalesRepository {
           valueInputOption: 'USER_ENTERED',
         );
       }
+    }
+
+    // Al resincronizar, descontamos el stock que no se descontó cuando estaba offline
+    try {
+      final items = saleJson['items'] as List;
+      for (final item in items) {
+        final productId = item['id_producto'].toString();
+        final quantity = int.tryParse(item['cantidad'].toString()) ?? 0;
+        final products = await productRepository.getProducts();
+        final idx = products.indexWhere((p) => p.id == productId);
+        if (idx >= 0) {
+          final currentStock = products[idx].stockQuantity;
+          final newStock = (currentStock - quantity).clamp(0, 999999);
+          await productRepository.updateStock(productId, newStock);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error al actualizar stock en resync: $e');
     }
   }
 
