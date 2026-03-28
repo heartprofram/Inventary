@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="Inventaryico.png" alt="Inventary Logo" width="150" height="150">
+  <img src="Inventaryicofinal.png" alt="Inventary Logo" width="150" height="150">
   <h1>Inventary & POS v1.9.3</h1>
   <p><em>Sistema Híbrido de Punto de Venta e Inventario (Flutter + Google Sheets + FastAPI)</em></p>
 </div>
