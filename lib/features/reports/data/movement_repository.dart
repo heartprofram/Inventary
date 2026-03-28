@@ -23,9 +23,11 @@ class MovementRepository {
       List<dynamic> rows;
       
       if (kIsWeb) {
+        // Modo Web: Uso de Dio contra Backend Python
         final response = await dio.get('$baseUrl/movimientos', queryParameters: {'days': days});
         rows = response.data ?? [];
       } else {
+        // Modo Nativo: Uso directo de Google Sheets API
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
           AppConstants.spreadSheetId,
           'Movimientos!A2:F',
@@ -83,14 +85,11 @@ class MovementRepository {
         );
       }
     } catch (networkError) {
-      // Fallo de red → guardar en cola offline
       debugPrint('[MovementRepo] Error de red, guardando en modo offline: $networkError');
       await localStorageService.addPendingMovement(movement.toMap());
-      // No relanzamos: el movimiento queda encolado para sincronizar luego.
     }
   }
 
-  /// Re-envía un movimiento encolado. Usado por SyncService.
   Future<void> resyncMovement(Map<String, dynamic> movementMap) async {
     final row = [
       movementMap['id'],
@@ -100,6 +99,7 @@ class MovementRepository {
       movementMap['amountUSD'],
       movementMap['amountVES'],
     ];
+
     if (kIsWeb) {
       await dio.post('$baseUrl/movimientos', data: {'row': row});
     } else {

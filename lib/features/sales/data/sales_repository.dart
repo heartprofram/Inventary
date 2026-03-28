@@ -25,14 +25,16 @@ class SalesRepository {
 
   Future<void> processSale(Sale sale) async {
     try {
-      // 1. Preparar los datos
+      // LLAMADA INMEDIATA A RED/OFFLINE PARA PROTEGER LA VENTA
+      // Se eliminó cualquier bucle previo de descuento de stock para dar prioridad a la persistencia.
+      
       final ventaRow = [
         sale.id,
         sale.date.toIso8601String(),
         sale.totalUSD,
         sale.totalVES,
         sale.exchangeRate,
-        ' ', // pdf_url: espacio para evitar que Google Sheets desplace columnas
+        ' ', // pdf_url placeholder
         jsonEncode(sale.payments.map((p) => p.toJson()).toList()),
         sale.debtorName != null && sale.debtorName!.trim().isNotEmpty ? sale.debtorName! : ' '
       ];
@@ -46,10 +48,8 @@ class SalesRepository {
         d.subtotalUSD
       ]).toList();
 
-      // 2. Enviar a Google Sheets (con fallback offline)
       await _sendSaleToNetwork(sale, ventaRow, detallesRows);
     } catch (e) {
-      // Error crítico
       throw Exception('Error al procesar la venta: $e');
     }
   }
@@ -66,17 +66,17 @@ class SalesRepository {
         }
       }
     } catch (e) {
-      debugPrint('Error al descontar stock: $e');
+      debugPrint('[SalesRepo] Error silencioso al descontar stock: $e');
     }
   }
 
-  /// Intenta enviar la venta a la red. Si falla, la guarda en la cola offline.
   Future<void> _sendSaleToNetwork(
     Sale sale,
     List<dynamic> ventaRow,
     List<List<dynamic>> detallesRows,
   ) async {
     try {
+      // 1. Persistencia de la Venta (Modo Híbrido)
       if (kIsWeb) {
         final ventaData = {
           'id_venta': sale.id,
@@ -85,7 +85,7 @@ class SalesRepository {
           'total_ves': sale.totalVES,
           'tasa_cambio': sale.exchangeRate,
           'metodos_pago': sale.payments.map((p) => p.toJson()).toList(),
-          'pdf_url': ' ', // Fuerza espacio para evadir compresión
+          'pdf_url': ' ',
           'detalles': sale.debtorName != null && sale.debtorName!.trim().isNotEmpty ? sale.debtorName! : ' '
         };
         final detallesData = sale.details.map((d) => {
@@ -95,6 +95,7 @@ class SalesRepository {
           'precio_unitario_usd': d.unitPriceUSD,
           'subtotal_usd': d.subtotalUSD
         }).toList();
+        
         await dio.post('$baseUrl/ventas', data: {
           'venta': ventaData,
           'detalles': detallesData,
@@ -113,17 +114,21 @@ class SalesRepository {
           valueInputOption: 'USER_ENTERED',
         );
       }
-      // Si llegamos aquí, la red funcionó. Descontamos stock al final.
-      await _deductStock(sale.details);
+
+      // 2. Si la persistencia fue exitosa, descontar stock en bloque silencioso
+      try {
+        await _deductStock(sale.details);
+      } catch (stockError) {
+        debugPrint('[SalesRepo] Error al actualizar stock (pero venta guardada): $stockError');
+      }
+
     } catch (networkError) {
-      // Fallo de red → guardar en cola offline
-      debugPrint('[SalesRepo] Error de red, guardando en modo offline: $networkError');
+      // SALVAVIDAS: Fallo de red → guardar en cola offline inmediata
+      debugPrint('[SalesRepo] Modo Offline activado: Guardando venta localmente');
       await localStorageService.addPendingSale(_saleToJson(sale));
-      // No relanzamos: la UI trata la venta como exitosa localmente.
     }
   }
 
-  /// Serializa una venta para la cola offline.
   Map<String, dynamic> _saleToJson(Sale sale) {
     return {
       'id_venta': sale.id,
@@ -144,7 +149,35 @@ class SalesRepository {
     };
   }
 
-  /// Re-envía una venta almacenada en la cola offline. Usado por SyncService.
+  Sale _mapJsonToSale(Map<String, dynamic> json) {
+    final items = (json['items'] as List? ?? []).map((i) => SaleDetail(
+      productId: i['id_producto'].toString(),
+      productName: i['nombre_producto'].toString(),
+      quantity: int.tryParse(i['cantidad'].toString()) ?? 0,
+      unitPriceUSD: double.tryParse(i['precio_unitario_usd'].toString()) ?? 0.0,
+    )).toList();
+
+    final payments = (json['metodos_pago'] as List? ?? []).map((p) => Payment(
+      method: p['method']?.toString() ?? 'Desconocido',
+      amount: (p['amount'] as num).toDouble(),
+    )).toList();
+
+    final sale = Sale(
+      id: json['id_venta']?.toString() ?? '',
+      date: DateTime.tryParse(json['fecha']?.toString() ?? '') ?? DateTime.now(),
+      exchangeRate: double.tryParse(json['tasa_cambio'].toString()) ?? 1.0,
+      details: items,
+      payments: payments,
+      debtorName: json['detalles_nombre']?.toString() == ' ' ? null : json['detalles_nombre']?.toString(),
+    );
+    
+    sale.overrideTotals(
+      double.tryParse(json['total_usd'].toString()) ?? 0.0,
+      double.tryParse(json['total_ves'].toString()) ?? 0.0,
+    );
+    return sale;
+  }
+
   Future<void> resyncSale(Map<String, dynamic> saleJson) async {
     if (kIsWeb) {
       final detallesData = (saleJson['items'] as List).map((d) => {
@@ -203,7 +236,6 @@ class SalesRepository {
       }
     }
 
-    // Al resincronizar, descontamos el stock que no se descontó cuando estaba offline
     try {
       final items = saleJson['items'] as List;
       for (final item in items) {
@@ -223,9 +255,12 @@ class SalesRepository {
   }
 
   Future<List<Sale>> getSalesHistory({int days = 30}) async {
+    List<Sale> networkSales = [];
+    
+    // 1. Intentar llamadas de red
     try {
-      List<dynamic> ventasRows;
-      List<dynamic> detallesRows;
+      List<dynamic> ventasRows = [];
+      List<dynamic> detallesRows = [];
 
       if (kIsWeb) {
         final ventasResp = await dio.get('$baseUrl/ventas', queryParameters: {'days': days});
@@ -262,17 +297,16 @@ class SalesRepository {
       for (var row in detallesRows) {
         if (row.length >= 6) {
           final saleId = row[0].toString();
-          final detail = SaleDetail(
+          detailsMap.putIfAbsent(saleId, () => []).add(SaleDetail(
             productId: row[1].toString(),
             productName: row[2].toString(),
             quantity: int.tryParse(row[3].toString()) ?? 0,
             unitPriceUSD: double.tryParse(row[4].toString().replaceAll(',', '.')) ?? 0.0,
-          );
-          detailsMap.putIfAbsent(saleId, () => []).add(detail);
+          ));
         }
       }
 
-      final List<Sale> sales = ventasRows.where((row) => row.length >= 5).map((row) {
+      networkSales = ventasRows.where((row) => row.length >= 5).map((row) {
         final saleId = row[0].toString();
         final dateStr = row[1].toString();
         final totalUSD = double.tryParse(row[2].toString().replaceAll(',', '.')) ?? 0.0;
@@ -298,10 +332,7 @@ class SalesRepository {
            } catch(e) {
              parsedPayments = [Payment(method: 'Efectivo', amount: totalUSD)];
            }
-           
-           if (row.length > pIndex + 1) {
-              debtorName = row[pIndex + 1].toString();
-           }
+           if (row.length > pIndex + 1) debtorName = row[pIndex + 1].toString();
         } else {
            if (row.length >= 7 && row[6].toString().isNotEmpty && !row[6].toString().startsWith('http')) {
               parsedPayments = [Payment(method: row[6].toString(), amount: totalUSD)];
@@ -311,23 +342,33 @@ class SalesRepository {
            if (row.length >= 8) debtorName = row[7].toString();
         }
 
-        final details = detailsMap[saleId] ?? [];
-        
-        return Sale(
+        final sale = Sale(
           id: saleId,
           date: DateTime.tryParse(dateStr) ?? DateTime.now(),
           exchangeRate: exchangeRate,
-          details: details,
+          details: detailsMap[saleId] ?? [],
           payments: parsedPayments,
           debtorName: debtorName,
-        )..overrideTotals(totalUSD, totalVES);
+        );
+        sale.overrideTotals(totalUSD, totalVES);
+        return sale;
       }).toList();
-
-      sales.sort((a, b) => b.date.compareTo(a.date));
-      return sales;
     } catch (e) {
-      throw Exception('Error al obtener el historial de ventas: $e');
+      debugPrint('[SalesRepo] Error cargando historial remoto: $e');
     }
+
+    // 2. Concatenar con ventas offline pendientes
+    List<Sale> pendingSales = [];
+    try {
+      final localJsons = await localStorageService.getPendingSales();
+      pendingSales = localJsons.map((j) => _mapJsonToSale(j)).toList();
+    } catch (e) {
+      debugPrint('[SalesRepo] Error cargando ventas locales: $e');
+    }
+
+    final allSales = [...pendingSales, ...networkSales];
+    allSales.sort((a, b) => b.date.compareTo(a.date));
+    return allSales;
   }
 
   Future<void> updateSale(Sale oldSale, Sale newSale) async {
@@ -347,18 +388,15 @@ class SalesRepository {
           'metodos_pago': payments.map((p) => p.toJson()).toList(),
         });
       } else {
-        // Buscar fila por ID en Ventas (Col A) y actualizar Col F (Métodos de Pago)
         final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A');
         final vRows = vResp.values ?? [];
-        
         int rowIndex = -1;
         for (int i = 0; i < vRows.length; i++) {
           if (vRows[i].isNotEmpty && vRows[i][0].toString() == idVenta) {
-            rowIndex = i + 1; // 1-indexed para Sheets
+            rowIndex = i + 1;
             break;
           }
         }
-
         if (rowIndex != -1) {
           final paymentsJson = jsonEncode(payments.map((p) => p.toJson()).toList());
           await googleApi.sheetsApi.spreadsheets.values.update(
@@ -376,7 +414,6 @@ class SalesRepository {
 
   Future<void> deleteSale(Sale sale) async {
     try {
-      // 1. Devolver el stock (Asegurando que sea antes de borrar)
       for (final detail in sale.details) {
         final products = await productRepository.getProducts();
         final idx = products.indexWhere((p) => p.id == detail.productId);
@@ -387,23 +424,18 @@ class SalesRepository {
         }
       }
 
-      // 2. Borrar la venta
       if (kIsWeb) {
         await dio.delete('$baseUrl/ventas/${sale.id}');
       } else {
         final meta = await googleApi.sheetsApi.spreadsheets.get(AppConstants.spreadSheetId);
         final sheetVentas = meta.sheets?.firstWhere((s) => s.properties?.title == 'Ventas');
         final sheetDetalles = meta.sheets?.firstWhere((s) => s.properties?.title == 'DetalleVentas');
-        
         final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A');
         final dResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'DetalleVentas!A:A');
-        
         final vRows = vResp.values ?? [];
         final dRows = dResp.values ?? [];
-        
         List<sheets.Request> requests = [];
         
-        // Buscar índices en DetalleVentas (de abajo hacia arriba para no alterar índices previos)
         for (int i = dRows.length - 1; i >= 0; i--) {
           if (dRows[i].isNotEmpty && dRows[i][0] == sale.id) {
             requests.add(sheets.Request(deleteDimension: sheets.DeleteDimensionRequest(
@@ -416,8 +448,6 @@ class SalesRepository {
             )));
           }
         }
-        
-        // Buscar índice en Ventas
         for (int i = vRows.length - 1; i >= 0; i--) {
           if (vRows[i].isNotEmpty && vRows[i][0] == sale.id) {
             requests.add(sheets.Request(deleteDimension: sheets.DeleteDimensionRequest(
@@ -430,7 +460,6 @@ class SalesRepository {
             )));
           }
         }
-        
         if (requests.isNotEmpty) {
           await googleApi.sheetsApi.spreadsheets.batchUpdate(
             sheets.BatchUpdateSpreadsheetRequest(requests: requests),

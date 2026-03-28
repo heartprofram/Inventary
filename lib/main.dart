@@ -14,32 +14,62 @@ import 'package:inventary/features/sales/presentation/screens/pending_payments_s
 import 'package:hive_flutter/hive_flutter.dart';
 
 void main() async {
+  // 0. Asegurar enlace de Flutter
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 1. Inicializar Hive para soporte PWA offline
-  await Hive.initFlutter();
-  await Hive.openBox('inventory_box');
-  await Hive.openBox('sales_queue'); 
+  // 1. Inicializar almacenamiento local (Debe ser rápido y confiable)
+  try {
+    await Hive.initFlutter();
+    await Hive.openBox('inventory_box');
+    await Hive.openBox('sales_queue');
+    await Hive.openBox('movements_queue'); 
+    debugPrint('[Hive] Cajas inicializadas correctamente.');
+  } catch (e) {
+    debugPrint('[Hive] Error crítico abriendo cajas: $e');
+  }
   
+  // 2. Crear instancia de API (sin bloquear el arranque con await global)
   final googleApi = GoogleApiService();
-  await googleApi.init();
   
+  // 3. Crear el contenedor de Riverpod con el override ya presente pero el api en proceso de init
   final container = ProviderContainer(
     overrides: [
       googleApiServiceProvider.overrideWithValue(googleApi),
     ],
   );
 
-  // Iniciar servicio de sincronización offline en segundo plano
-  container.read(syncServiceProvider).start();
-  
+  // 4. Iniciar la App inmediatamente para evitar la pantalla negra integrada
   runApp(
     UncontrolledProviderScope(
       container: container,
       child: const PosApp(),
     ),
   );
+
+  // 5. Carga diferida de servicios de red (No bloquea la UI inicial)
+  _initServicesBackground(googleApi, container);
 }
+
+/// Inicialización asíncrona de servicios pesados (Red / Google Auth)
+void _initServicesBackground(GoogleApiService googleApi, ProviderContainer container) async {
+  try {
+    debugPrint('[Init] Iniciando conexión de red en segundo plano...');
+    
+    // Intentar inicializar API con un tiempo límite razonable
+    await googleApi.init().timeout(const Duration(seconds: 8), onTimeout: () {
+      debugPrint('[Init] Conexión de red lenta. Continuando en modo offline.');
+    });
+
+    // Una vez que el API está listo (o dio timeout), iniciamos la sincronización
+    container.read(syncServiceProvider).start();
+    
+    debugPrint('[Init] Servicios en segundo plano completados.');
+  } catch (e) {
+    debugPrint('[Init] Error en inicialización de servicios tras el arranque: $e');
+    // Si falla el API, el SyncService igual tendrá sus propios reintentos internos.
+  }
+}
+
 
 class PosApp extends StatelessWidget {
   const PosApp({super.key});

@@ -26,15 +26,16 @@ class ProductRepository {
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
           AppConstants.spreadSheetId,
           'Productos!A2:G',
-        ).timeout(const Duration(seconds: 5)); // Un poco más para Google Sheets
+        ).timeout(const Duration(seconds: 5));
         rows = response.values ?? [];
       }
       
-      // Si la red fue exitosa, actualizamos el caché local
-      await box.put('products_cache', rows);
+      // Actualizar caché si la red fue exitosa
+      if (rows.isNotEmpty) {
+        await box.put('products_cache', rows);
+      }
     } catch (networkError) {
       debugPrint('[Offline] Error de red en ${kIsWeb ? 'Web' : 'Android'}, cargando caché: $networkError');
-      // CARGA OFFLINE: Recuperar los últimos datos guardados en Hive
       rows = box.get('products_cache', defaultValue: []) as List<dynamic>;
     }
 
@@ -70,9 +71,8 @@ class ProductRepository {
       if (kIsWeb) {
         await dio.post('$baseUrl/productos', data: {'row': row});
       } else {
-        final valueRange = sheets.ValueRange(values: [row]);
         await googleApi.sheetsApi.spreadsheets.values.append(
-          valueRange,
+          sheets.ValueRange(values: [row]),
           AppConstants.spreadSheetId,
           'Productos!A:G',
           valueInputOption: 'USER_ENTERED',
@@ -86,7 +86,7 @@ class ProductRepository {
   Future<void> updateStock(String productId, int newStock) async {
     try {
       if (kIsWeb) {
-        // En Web, el servidor Python ya maneja la búsqueda de fila
+        // Modo Web: Uso de Dio contra Backend Python
         final productsResp = await dio.get('$baseUrl/productos');
         final rows = productsResp.data as List<dynamic>;
         int rowIndex = -1;
@@ -103,10 +103,10 @@ class ProductRepository {
             });
         }
       } else {
-        // En Nativo, debemos buscar la fila localmente
+        // Modo Nativo: Uso directo de Google Sheets API
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
           AppConstants.spreadSheetId,
-          'Productos!A2:A', // Solo necesitamos la columna de IDs
+          'Productos!A2:A',
         );
         final rows = response.values ?? [];
         int rowIndex = -1;
