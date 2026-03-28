@@ -14,62 +14,124 @@ import 'package:inventary/features/sales/presentation/screens/pending_payments_s
 import 'package:hive_flutter/hive_flutter.dart';
 
 void main() async {
-  // 0. Asegurar enlace de Flutter
+  // 1. Asegurar enlace de Flutter
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 1. Inicializar almacenamiento local (Debe ser rápido y confiable)
+  // 2. Inicializar almacenamiento local (Hive)
   try {
     await Hive.initFlutter();
+    // Abrir todas las cajas necesarias para evitar latencia luego
     await Hive.openBox('inventory_box');
+    await Hive.openBox('sales_cache');
+    await Hive.openBox('movements_cache');
     await Hive.openBox('sales_queue');
-    await Hive.openBox('movements_queue'); 
-    debugPrint('[Hive] Cajas inicializadas correctamente.');
+    await Hive.openBox('movements_queue');
+    await Hive.openBox('inventory_queue');
+    debugPrint('[Hive] Todas las cajas inicializadas correctamente.');
   } catch (e) {
     debugPrint('[Hive] Error crítico abriendo cajas: $e');
   }
   
-  // 2. Crear instancia de API (sin bloquear el arranque con await global)
+  // 3. Instanciar servicio API
   final googleApi = GoogleApiService();
   
-  // 3. Crear el contenedor de Riverpod con el override ya presente pero el api en proceso de init
+  // 4. Crear contenedor de Riverpod con overrides
   final container = ProviderContainer(
     overrides: [
       googleApiServiceProvider.overrideWithValue(googleApi),
     ],
   );
 
-  // 4. Iniciar la App inmediatamente para evitar la pantalla negra integrada
+  // 5. Iniciar la App con el Bootstrapper
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: const PosApp(),
+      child: AppBootstrapper(googleApi: googleApi),
     ),
   );
-
-  // 5. Carga diferida de servicios de red (No bloquea la UI inicial)
-  _initServicesBackground(googleApi, container);
 }
 
-/// Inicialización asíncrona de servicios pesados (Red / Google Auth)
-void _initServicesBackground(GoogleApiService googleApi, ProviderContainer container) async {
-  try {
-    debugPrint('[Init] Iniciando conexión de red en segundo plano...');
-    
-    // Intentar inicializar API con un tiempo límite razonable
-    await googleApi.init().timeout(const Duration(seconds: 8), onTimeout: () {
-      debugPrint('[Init] Conexión de red lenta. Continuando en modo offline.');
-    });
+/// Widget encargado de la inicialización asíncrona crítica antes de mostrar la UI
+class AppBootstrapper extends ConsumerStatefulWidget {
+  final GoogleApiService googleApi;
+  const AppBootstrapper({super.key, required this.googleApi});
 
-    // Una vez que el API está listo (o dio timeout), iniciamos la sincronización
-    container.read(syncServiceProvider).start();
-    
-    debugPrint('[Init] Servicios en segundo plano completados.');
-  } catch (e) {
-    debugPrint('[Init] Error en inicialización de servicios tras el arranque: $e');
-    // Si falla el API, el SyncService igual tendrá sus propios reintentos internos.
+  @override
+  ConsumerState<AppBootstrapper> createState() => _AppBootstrapperState();
+}
+
+class _AppBootstrapperState extends ConsumerState<AppBootstrapper> {
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      debugPrint('[Bootstrapper] Iniciando Google API (timeout 5s)...');
+      // Intentar inicializar API con un tiempo límite estricto
+      await widget.googleApi.init().timeout(const Duration(seconds: 5));
+      debugPrint('[Bootstrapper] Google API inicializado con éxito.');
+    } catch (e) {
+      debugPrint('[Bootstrapper] API no respondió a tiempo o error: $e. Continuando...');
+    } finally {
+      // Iniciar el servicio de sincronización (independientemente del estado del API)
+      ref.read(syncServiceProvider).start();
+      
+      // Marcar como inicializado para cambiar a la App principal
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Si no está inicializado, mostrar pantalla de carga premium
+    if (!_isInitialized) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+          useMaterial3: true,
+        ),
+        home: const Scaffold(
+          backgroundColor: Colors.teal,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.point_of_sale, size: 80, color: Colors.white),
+                SizedBox(height: 24),
+                CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 3,
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Iniciando sistema...',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Una vez inicializado, cargar la aplicación principal
+    return const PosApp();
   }
 }
-
 
 class PosApp extends StatelessWidget {
   const PosApp({super.key});
@@ -81,7 +143,7 @@ class PosApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
-        fontFamily: 'Roboto', // Opcional, asegurar que se vea moderno
+        fontFamily: 'Roboto',
       ),
       debugShowCheckedModeBanner: false,
       home: const MainScreen(),

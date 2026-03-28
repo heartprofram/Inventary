@@ -83,7 +83,7 @@ class ProductRepository {
     }
   }
 
-  Future<void> updateStock(String productId, int newStock) async {
+  Future<void> updateStock(String productId, int newStock, {bool isSyncing = false}) async {
     try {
       if (kIsWeb) {
         // Modo Web: Uso de Dio contra Backend Python
@@ -127,8 +127,55 @@ class ProductRepository {
           );
         }
       }
+
+      // Éxito en red: Actualizar cache local
+      await _updateLocalCacheStock(productId, newStock);
+
     } catch (e) {
-      throw Exception('Error al actualizar stock: $e');
+      debugPrint('[InventoryRepo] Fallo al actualizar stock en red: $e');
+      
+      if (!isSyncing) {
+        // Si no es un proceso de sincronización, guardamos en la cola local
+        final queue = Hive.box('inventory_queue');
+        await queue.add({
+          'productId': productId,
+          'newStock': newStock,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+
+        // Actualizamos cache local para que la UI se mantenga consistente
+        await _updateLocalCacheStock(productId, newStock);
+      } else {
+        // Si ya estábamos sincronizando, relanzamos el error para el SyncService
+        rethrow;
+      }
+    }
+  }
+
+  /// Actualiza el stock en la lista cacheada localmente en Hive
+  Future<void> _updateLocalCacheStock(String productId, int newStock) async {
+    try {
+      final box = Hive.box('inventory_box');
+      final products = box.get('products_cache', defaultValue: []) as List<dynamic>;
+      
+      bool updated = false;
+      for (int i = 0; i < products.length; i++) {
+        final row = List<dynamic>.from(products[i] as List);
+        if (row.isNotEmpty && row[0].toString() == productId) {
+          if (row.length > 5) {
+            row[5] = newStock;
+            products[i] = row;
+            updated = true;
+            break;
+          }
+        }
+      }
+      
+      if (updated) {
+        await box.put('products_cache', products);
+      }
+    } catch (e) {
+      debugPrint('[InventoryRepo] Error actualizando cache local de stock: $e');
     }
   }
   

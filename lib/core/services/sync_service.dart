@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:hive/hive.dart';
 import '../services/local_storage_service.dart';
 import '../../features/sales/data/sales_repository.dart';
 import '../../features/reports/data/movement_repository.dart';
@@ -42,10 +43,39 @@ class SyncService {
     _isSyncing = true;
 
     try {
+      // 1. Sincronizar actualizaciones de stock primero para asegurar integridad
+      await _syncInventory();
+      
+      // 2. Sincronizar ventas y movimientos
       await _syncSales();
       await _syncMovements();
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  Future<void> _syncInventory() async {
+    final box = Hive.box('inventory_queue');
+    if (box.isEmpty) return;
+
+    final keys = box.keys.toList();
+    debugPrint('[SyncService] Sincronizando ${keys.length} actualizaciones de stock pendientes...');
+
+    for (final key in keys) {
+      final action = box.get(key) as Map;
+      try {
+        await _salesRepo.productRepository.updateStock(
+          action['productId'].toString(),
+          int.tryParse(action['newStock'].toString()) ?? 0,
+          isSyncing: true,
+        );
+        await box.delete(key);
+        debugPrint('[SyncService] Stock sincronizado: ${action['productId']}');
+      } catch (e) {
+        debugPrint('[SyncService] Error sincronizando stock de ${action['productId']}: $e');
+        // Detener el ciclo para evitar reintentos fallidos masivos
+        break;
+      }
     }
   }
 

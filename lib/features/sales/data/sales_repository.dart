@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:dio/dio.dart';
 import 'package:googleapis/sheets/v4.dart' as sheets;
+import 'package:hive/hive.dart';
 import '../../../core/services/google_api_service.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/constants/app_constants.dart';
@@ -262,35 +263,50 @@ class SalesRepository {
       List<dynamic> ventasRows = [];
       List<dynamic> detallesRows = [];
 
-      if (kIsWeb) {
-        final ventasResp = await dio.get('$baseUrl/ventas', queryParameters: {'days': days});
-        final detallesResp = await dio.get('$baseUrl/detalle_ventas');
-        ventasRows = ventasResp.data ?? [];
-        detallesRows = detallesResp.data ?? [];
-      } else {
-        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(
-          AppConstants.spreadSheetId,
-          'Ventas!A2:H',
-        );
-        final dResp = await googleApi.sheetsApi.spreadsheets.values.get(
-          AppConstants.spreadSheetId,
-          'DetalleVentas!A2:F',
-        );
-        ventasRows = vResp.values ?? [];
-        detallesRows = dResp.values ?? [];
+      try {
+        if (kIsWeb) {
+          final ventasResp = await dio.get('$baseUrl/ventas', queryParameters: {'days': days});
+          final detallesResp = await dio.get('$baseUrl/detalle_ventas');
+          ventasRows = ventasResp.data ?? [];
+          detallesRows = detallesResp.data ?? [];
+        } else {
+          final vResp = await googleApi.sheetsApi.spreadsheets.values.get(
+            AppConstants.spreadSheetId,
+            'Ventas!A2:H',
+          );
+          final dResp = await googleApi.sheetsApi.spreadsheets.values.get(
+            AppConstants.spreadSheetId,
+            'DetalleVentas!A2:F',
+          );
+          ventasRows = vResp.values ?? [];
+          detallesRows = dResp.values ?? [];
 
-        if (days > 0) {
-          final cutoffDate = DateTime.now().subtract(Duration(days: days));
-          ventasRows = ventasRows.where((row) {
-            if (row.length < 2) return false;
-            try {
-               final date = DateTime.parse(row[1].toString());
-               return date.isAfter(cutoffDate) || date.isAtSameMomentAs(cutoffDate);
-            } catch (_) {
-               return true;
-            }
-          }).toList();
+          if (days > 0) {
+            final cutoffDate = DateTime.now().subtract(Duration(days: days));
+            ventasRows = ventasRows.where((row) {
+              if (row.length < 2) return false;
+              try {
+                 final date = DateTime.parse(row[1].toString());
+                 return date.isAfter(cutoffDate) || date.isAtSameMomentAs(cutoffDate);
+              } catch (_) {
+                 return true;
+              }
+            }).toList();
+          }
         }
+
+        // GUARDADO EN CACHE SI RED TIENE ÉXITO
+        if (ventasRows.isNotEmpty) {
+          final box = Hive.box('sales_cache');
+          await box.put('ventas_cache', ventasRows);
+          await box.put('detalles_cache', detallesRows);
+        }
+      } catch (networkError) {
+        debugPrint('[SalesRepo] Error de red, cargando de cache local: $networkError');
+        // RESCATE DE CACHE SI RED FALLA
+        final box = Hive.box('sales_cache');
+        ventasRows = box.get('ventas_cache', defaultValue: []);
+        detallesRows = box.get('detalles_cache', defaultValue: []);
       }
 
       final Map<String, List<SaleDetail>> detailsMap = {};
@@ -354,7 +370,7 @@ class SalesRepository {
         return sale;
       }).toList();
     } catch (e) {
-      debugPrint('[SalesRepo] Error cargando historial remoto: $e');
+      debugPrint('[SalesRepo] Error crítico procesando historial: $e');
     }
 
     // 2. Concatenar con ventas offline pendientes
