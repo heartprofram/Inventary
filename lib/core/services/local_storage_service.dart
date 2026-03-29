@@ -6,6 +6,7 @@ class LocalStorageService {
   static const String _salesQueue = 'sales_queue';
   static const String _movementsQueue = 'movements_queue';
   static const String _inventoryQueue = 'inventory_queue';
+  static const String _paymentsQueue = 'payments_queue';
   static const String _defaultCacheBox = 'inventory_box';
 
   // ─── MÉTODOS DE CACHÉ GENÉRICA (SOLUCIÓN VIOLACIÓN DE CAPAS) ───────────────
@@ -77,11 +78,27 @@ class LocalStorageService {
     await box.delete(key);
   }
 
+  Future<List<Map<String, dynamic>>> getPendingPaymentUpdates() async {
+    final box = await _getBox(_paymentsQueue);
+    return box.values.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<void> addPendingPaymentUpdate(String idVenta, List<Map<String, dynamic>> payments) async {
+    final box = await _getBox(_paymentsQueue);
+    await box.put(idVenta, {'id_venta': idVenta, 'metodos_pago': payments});
+  }
+
+  Future<void> removePendingPaymentUpdate(String idVenta) async {
+    final box = await _getBox(_paymentsQueue);
+    await box.delete(idVenta);
+  }
+
   Future<int> getPendingCount() async {
     final b1 = await _getBox(_salesQueue);
     final b2 = await _getBox(_movementsQueue);
     final b3 = await _getBox(_inventoryQueue);
-    return b1.length + b2.length + b3.length;
+    final b4 = await _getBox(_paymentsQueue);
+    return b1.length + b2.length + b3.length + b4.length;
   }
 
   Future<Box> _getBox(String name) async {

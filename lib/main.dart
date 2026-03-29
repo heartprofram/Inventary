@@ -12,6 +12,7 @@ import 'package:inventary/features/reports/presentation/screens/movements_screen
 import 'package:inventary/features/sales/presentation/screens/sales_history_screen.dart';
 import 'package:inventary/features/sales/presentation/screens/pending_payments_screen.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:inventary/core/widgets/custom_snackbar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -138,22 +139,38 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sistema POS'),
+        title: const Text('Inventary'), // <-- Título principal cambiado
         actions: [
           Consumer(builder: (context, ref, _) {
             final syncCount = ref.watch(pendingSyncCountProvider);
             return syncCount.when(
-              data: (count) => count > 0
+              data: (count) => count > 0 
                 ? IconButton(
                     icon: Badge(label: Text('$count'), child: const Icon(Icons.cloud_off, color: Colors.orange)),
-                    onPressed: () => ref.read(syncServiceProvider).forceSync(),
+                    onPressed: () async {
+                      try {
+                        CustomSnackBar.success(context, 'Intentando sincronizar con Google...');
+                        await ref.read(syncServiceProvider).forceSync();
+                      } catch (e) {
+                        CustomSnackBar.error(context, 'ERROR: $e');
+                      }
+                    },
                   )
                 : const Icon(Icons.cloud_done, color: Colors.green),
-              loading: () => const CircularProgressIndicator(),
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
               error: (_, __) => const Icon(Icons.error_outline),
             );
           }),
-          const SizedBox(width: 16),
+          Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu, size: 30),
+              onPressed: () => Scaffold.of(context).openEndDrawer(),
+            ),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _pages[_selectedIndex],
@@ -172,7 +189,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.inventory),
-              title: const Text('Stock'),
+              title: const Text('Inventario'), // <-- Cambiado
               selected: _selectedIndex == 0,
               onTap: () {
                 setState(() => _selectedIndex = 0);
@@ -181,7 +198,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.shopping_cart),
-              title: const Text('POS'),
+              title: const Text('Venta (POS)'), // <-- Cambiado
               selected: _selectedIndex == 1,
               onTap: () {
                 setState(() => _selectedIndex = 1);
@@ -190,7 +207,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.analytics),
-              title: const Text('Reportes'),
+              title: const Text('Cierre de caja'), // <-- Cambiado
               selected: _selectedIndex == 2,
               onTap: () {
                 setState(() => _selectedIndex = 2);
@@ -199,7 +216,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.receipt),
-              title: const Text('Ventas'),
+              title: const Text('Historial de Ventas'), // <-- Cambiado
               selected: _selectedIndex == 3,
               onTap: () {
                 setState(() => _selectedIndex = 3);
@@ -208,7 +225,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.pending),
-              title: const Text('Pagos'),
+              title: const Text('Cuentas por Cobrar'), // <-- Cambiado
               selected: _selectedIndex == 4,
               onTap: () {
                 setState(() => _selectedIndex = 4);
@@ -217,7 +234,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.list),
-              title: const Text('Movs'),
+              title: const Text('Movimientos'), // <-- Cambiado
               selected: _selectedIndex == 5,
               onTap: () {
                 setState(() => _selectedIndex = 5);

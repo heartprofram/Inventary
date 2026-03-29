@@ -35,7 +35,7 @@ class ReportsRepository {
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
           AppConstants.spreadSheetId,
           'Ventas!A2:H',
-        ).timeout(const Duration(seconds: 10));
+        ).timeout(const Duration(seconds: 5));
         rows = response.values ?? [];
       }
       

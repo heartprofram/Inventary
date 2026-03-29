@@ -76,7 +76,6 @@ class SalesRepository {
     List<List<dynamic>> detallesRows,
   ) async {
     try {
-      // 1. Persistencia de la Venta (Modo Híbrido)
       if (kIsWeb) {
         final ventaData = {
           'id_venta': sale.id,
@@ -99,31 +98,30 @@ class SalesRepository {
         await dio.post('$baseUrl/ventas', data: {
           'venta': ventaData,
           'detalles': detallesData,
-        });
+        }).timeout(const Duration(seconds: 10)); 
       } else {
         await googleApi.sheetsApi.spreadsheets.values.append(
           sheets.ValueRange(values: [ventaRow]),
           AppConstants.spreadSheetId,
           'Ventas!A:H',
           valueInputOption: 'USER_ENTERED',
-        );
+        ).timeout(const Duration(seconds: 10)); 
+        
         await googleApi.sheetsApi.spreadsheets.values.append(
           sheets.ValueRange(values: detallesRows),
           AppConstants.spreadSheetId,
           'DetalleVentas!A:F',
           valueInputOption: 'USER_ENTERED',
-        );
+        ).timeout(const Duration(seconds: 10)); 
       }
 
-      // 2. Si la persistencia fue exitosa, descontar stock en bloque silencioso
       try {
         await _deductStock(sale.details);
       } catch (stockError) {
-        debugPrint('[SalesRepo] Error al actualizar stock (pero venta guardada): $stockError');
+        debugPrint('[SalesRepo] Error al actualizar stock: $stockError');
       }
 
     } catch (networkError) {
-      // SALVAVIDAS: Fallo de red → guardar en cola offline inmediata
       debugPrint('[SalesRepo] Modo Offline activado: Guardando venta localmente');
       await localStorageService.addPendingSale(_saleToJson(sale));
     }
@@ -257,26 +255,29 @@ class SalesRepository {
   Future<List<Sale>> getSalesHistory({int days = 30}) async {
     List<Sale> networkSales = [];
     
-    // 1. Intentar llamadas de red
     try {
       List<dynamic> ventasRows = [];
       List<dynamic> detallesRows = [];
 
       try {
         if (kIsWeb) {
-          final ventasResp = await dio.get('$baseUrl/ventas', queryParameters: {'days': days});
-          final detallesResp = await dio.get('$baseUrl/detalle_ventas');
+          // AÑADIDO: Timeout de 5 segundos a las lecturas
+          final ventasResp = await dio.get('$baseUrl/ventas', queryParameters: {'days': days}).timeout(const Duration(seconds: 5));
+          final detallesResp = await dio.get('$baseUrl/detalle_ventas').timeout(const Duration(seconds: 5));
           ventasRows = ventasResp.data ?? [];
           detallesRows = detallesResp.data ?? [];
         } else {
+          // AÑADIDO: Timeout de 5 segundos a las lecturas de Google Sheets
           final vResp = await googleApi.sheetsApi.spreadsheets.values.get(
             AppConstants.spreadSheetId,
             'Ventas!A2:H',
-          );
+          ).timeout(const Duration(seconds: 5));
+          
           final dResp = await googleApi.sheetsApi.spreadsheets.values.get(
             AppConstants.spreadSheetId,
             'DetalleVentas!A2:F',
-          );
+          ).timeout(const Duration(seconds: 5));
+          
           ventasRows = vResp.values ?? [];
           detallesRows = dResp.values ?? [];
 
@@ -287,21 +288,19 @@ class SalesRepository {
               try {
                  final date = DateTime.parse(row[1].toString());
                  return date.isAfter(cutoffDate) || date.isAtSameMomentAs(cutoffDate);
-              } catch (_) {
-                 return true;
-              }
+              } catch (_) { return true; }
             }).toList();
           }
         }
 
-        // GUARDADO EN CACHE SI RED TIENE ÉXITO
+        // GUARDADO EN CACHE SI HAY INTERNET
         if (ventasRows.isNotEmpty) {
           await localStorageService.saveCache('sales_cache', 'ventas_cache', ventasRows);
           await localStorageService.saveCache('sales_cache', 'detalles_cache', detallesRows);
         }
       } catch (networkError) {
-        debugPrint('[SalesRepo] Error de red, cargando de cache local: $networkError');
-        // RESCATE DE CACHE SI RED FALLA
+        // LA MAGIA: Si no hay internet o tarda más de 5 seg, carga la memoria interna
+        debugPrint('[SalesRepo] Error de red en lectura, cargando de cache local');
         ventasRows = await localStorageService.getCache('sales_cache', 'ventas_cache', defaultValue: []);
         detallesRows = await localStorageService.getCache('sales_cache', 'detalles_cache', defaultValue: []);
       }
@@ -370,7 +369,7 @@ class SalesRepository {
       debugPrint('[SalesRepo] Error crítico procesando historial: $e');
     }
 
-    // 2. Concatenar con ventas offline pendientes
+    // AÑADE LAS DEUDAS Y VENTAS OFFLINE AL HISTORIAL VISUAL DE INMEDIATO
     List<Sale> pendingSales = [];
     try {
       final localJsons = await localStorageService.getPendingSales();
@@ -393,15 +392,15 @@ class SalesRepository {
     }
   }
 
-  Future<void> updateSaleStatus(String idVenta, List<Payment> payments) async {
+  Future<void> updateSaleStatus(String idVenta, List<Payment> payments, {bool isSyncing = false}) async {
     try {
       if (kIsWeb) {
         await dio.put('$baseUrl/ventas/update_status', data: {
           'id_venta': idVenta,
           'metodos_pago': payments.map((p) => p.toJson()).toList(),
-        });
+        }).timeout(const Duration(seconds: 15));
       } else {
-        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A');
+        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A').timeout(const Duration(seconds: 15));
         final vRows = vResp.values ?? [];
         int rowIndex = -1;
         for (int i = 0; i < vRows.length; i++) {
@@ -417,12 +416,24 @@ class SalesRepository {
             AppConstants.spreadSheetId,
             'Ventas!G$rowIndex',
             valueInputOption: 'USER_ENTERED',
-          );
+          ).timeout(const Duration(seconds: 15));
         }
       }
     } catch (e) {
-      throw Exception('Error al actualizar el estado de la venta: $e');
+      if (isSyncing) rethrow; 
+      debugPrint('[SalesRepo] Sin internet: Guardando abono localmente para sincronizar luego.');
+      await localStorageService.addPendingPaymentUpdate(idVenta, payments.map((p) => p.toJson()).toList());
     }
+  }
+
+  Future<void> resyncPaymentUpdate(Map<String, dynamic> updateJson) async {
+    final idVenta = updateJson['id_venta'];
+    final payments = (updateJson['metodos_pago'] as List).map((p) => Payment(
+      method: p['method']?.toString() ?? 'Desconocido',
+      amount: (p['amount'] as num).toDouble(),
+    )).toList();
+
+    await updateSaleStatus(idVenta, payments, isSyncing: true);
   }
 
   Future<void> deleteSale(Sale sale) async {
@@ -438,13 +449,13 @@ class SalesRepository {
       }
 
       if (kIsWeb) {
-        await dio.delete('$baseUrl/ventas/${sale.id}');
+        await dio.delete('$baseUrl/ventas/${sale.id}').timeout(const Duration(seconds: 15));
       } else {
-        final meta = await googleApi.sheetsApi.spreadsheets.get(AppConstants.spreadSheetId);
+        final meta = await googleApi.sheetsApi.spreadsheets.get(AppConstants.spreadSheetId).timeout(const Duration(seconds: 15));
         final sheetVentas = meta.sheets?.firstWhere((s) => s.properties?.title == 'Ventas');
         final sheetDetalles = meta.sheets?.firstWhere((s) => s.properties?.title == 'DetalleVentas');
-        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A');
-        final dResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'DetalleVentas!A:A');
+        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A').timeout(const Duration(seconds: 15));
+        final dResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'DetalleVentas!A:A').timeout(const Duration(seconds: 15));
         final vRows = vResp.values ?? [];
         final dRows = dResp.values ?? [];
         List<sheets.Request> requests = [];
@@ -477,11 +488,11 @@ class SalesRepository {
           await googleApi.sheetsApi.spreadsheets.batchUpdate(
             sheets.BatchUpdateSpreadsheetRequest(requests: requests),
             AppConstants.spreadSheetId,
-          );
+          ).timeout(const Duration(seconds: 15));
         }
       }
     } catch (e) {
-      throw Exception('Error al eliminar la venta: $e');
+      throw Exception('Tiempo de espera agotado. Verifica tu conexión a internet.');
     }
   }
 }

@@ -575,17 +575,18 @@ class _MixedDebtPaymentDialogState extends ConsumerState<_MixedDebtPaymentDialog
         finalPayments.add(Payment(method: PaymentMethods.pendiente, amount: _remainingUSD));
       }
       
-      await ref.read(pendingPaymentsProvider.notifier).updatePendingStatus(widget.pending.idVenta, finalPayments);
+      await ref.read(pendingPaymentsProvider.notifier)
+          .updatePendingStatus(widget.pending.idVenta, finalPayments);
       
       if (context.mounted) {
         Navigator.pop(context); // close loading
         Navigator.pop(context); // close modal
-        CustomSnackBar.success(context, _remainingUSD <= 0.001 ? 'Deuda liquidada con éxito.' : 'Abono procesado exitosamente.');
+        CustomSnackBar.success(context, _remainingUSD <= 0.001 ? 'Deuda liquidada (Guardado Local/Nube)' : 'Abono procesado exitosamente.');
       }
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
-        CustomSnackBar.error(context, 'Error al procesar el abono: $e');
+        CustomSnackBar.error(context, 'Error al procesar: $e');
       }
     }
   }

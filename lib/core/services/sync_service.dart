@@ -10,11 +10,9 @@ class SyncService {
   final SalesRepository _salesRepo;
   final MovementRepository _movementRepo;
   
-  // SOLUCIÓN: Callback para avisar a Riverpod
   final void Function()? onSyncComplete;
 
   bool _isSyncing = false;
-  // SOLUCIÓN: Manejo de suscripción para evitar fuga de memoria
   StreamSubscription? _connectivitySubscription;
 
   SyncService({
@@ -29,7 +27,7 @@ class SyncService {
   void start() {
     _connectivitySubscription?.cancel();
     
-    // Escuchar cambios de red de forma segura
+    // Escucha la red y revive la sincronización sin colapsar
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
       final hasConnection = results.any((r) => r != ConnectivityResult.none);
       if (hasConnection && !_isSyncing) {
@@ -38,15 +36,13 @@ class SyncService {
       }
     });
 
-    // Intento inicial
     _syncPending();
   }
 
-  // SOLUCIÓN: Limpieza de recursos
   void dispose() {
     _connectivitySubscription?.cancel();
     _connectivitySubscription = null;
-    debugPrint('[SyncService] Suscripción de conectividad cancelada.');
+    debugPrint('[SyncService] Suscripción cancelada.');
   }
 
   Future<void> _syncPending() async {
@@ -57,12 +53,13 @@ class SyncService {
       await _syncInventory();
       await _syncSales();
       await _syncMovements();
+      await _syncPayments();
       
-      // SOLUCIÓN: Ejecutar callback tras éxito
       onSyncComplete?.call();
-      debugPrint('[SyncService] Cola de sincronización procesada.');
-    } catch (e) {
-      debugPrint('[SyncService] Error en proceso de sincronización: $e');
+      debugPrint('[SyncService] Cola procesada exitosamente.');
+    } catch (e, stack) {
+      debugPrint('[SyncService] Error general, reintentará luego: $e \n $stack');
+      // SOLUCIÓN: Se eliminó el "rethrow" para no matar el hilo en segundo plano
     } finally {
       _isSyncing = false;
     }
@@ -78,9 +75,9 @@ class SyncService {
           isSyncing: true,
         );
         await _localStorage.removePendingInventoryUpdate(update['queue_key']);
-      } catch (e, stack) { 
-        debugPrint('Error en sync: $e \n $stack'); 
-        break; 
+      } catch (e) {
+        debugPrint('Fallo silencioso en Inventario: $e');
+        break; // SOLUCIÓN: Usamos break en lugar de throw para no congelar la app
       }
     }
   }
@@ -91,8 +88,8 @@ class SyncService {
       try {
         await _salesRepo.resyncSale(saleJson);
         await _localStorage.removePendingSale(saleJson['id_venta'].toString());
-      } catch (e, stack) { 
-        debugPrint('Error en sync: $e \n $stack'); 
+      } catch (e) {
+        debugPrint('Fallo silencioso en Ventas: $e');
         break; 
       }
     }
@@ -104,9 +101,22 @@ class SyncService {
       try {
         await _movementRepo.resyncMovement(mov);
         await _localStorage.removePendingMovement(mov['id'].toString());
-      } catch (e, stack) { 
-        debugPrint('Error en sync: $e \n $stack'); 
-        break; 
+      } catch (e) {
+        debugPrint('Fallo silencioso en Movimientos: $e');
+        break;
+      }
+    }
+  }
+
+  Future<void> _syncPayments() async {
+    final pending = await _localStorage.getPendingPaymentUpdates();
+    for (final update in List.from(pending)) {
+      try {
+        await _salesRepo.resyncPaymentUpdate(update);
+        await _localStorage.removePendingPaymentUpdate(update['id_venta'].toString());
+      } catch (e) {
+        debugPrint('Fallo silencioso en Abonos: $e');
+        break;
       }
     }
   }

@@ -670,10 +670,15 @@ class PosScreen extends ConsumerWidget {
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          child: _buildCartPanel(
-            builderCtx,
-            ref,
-            ref.read(exchangeRateProvider).value?.rate ?? 36.0,
+          // SOLUCIÓN: Usar un Consumer aquí para que el Modal se reconstruya en tiempo real
+          child: Consumer(
+            builder: (context, modalRef, child) {
+              return _buildCartPanel(
+                builderCtx,
+                modalRef, // Usamos el ref del modal, no el de la pantalla de atrás
+                modalRef.watch(exchangeRateProvider).value?.rate ?? 36.0,
+              );
+            },
           ),
         ),
       ),
