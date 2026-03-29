@@ -36,13 +36,13 @@ class SettingsScreen extends ConsumerWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('Tasa Actual:', style: TextStyle(fontSize: 18)),
-                              Text('Bs. ${rate.rate.toStringAsFixed(2)}', 
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.teal)),
+                              Text('Bs. ${rate.rate.toStringAsFixed(2)}',
+                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.teal)),
                             ],
                           ),
                           const SizedBox(height: 8),
-                          Text('Última actualización: ${rate.lastUpdated.toString().substring(0, 16)}', 
-                            style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          Text('Última actualización: ${rate.lastUpdated.toString().substring(0, 16)}',
+                              style: const TextStyle(color: Colors.grey, fontSize: 13)),
                           const SizedBox(height: 24),
                           Wrap(
                             spacing: 12.0,
@@ -95,38 +95,6 @@ class SettingsScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // 2. SECCIÓN: APARIENCIA
-              _buildSectionHeader('APARIENCIA'),
-              const SizedBox(height: 12),
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Column(
-                  children: [
-                    SwitchListTile(
-                      activeColor: Colors.teal,
-                      title: const Text('Modo Oscuro'),
-                      subtitle: const Text('Activar el tema visual nocturno'),
-                      secondary: const Icon(Icons.dark_mode),
-                      value: Theme.of(context).brightness == Brightness.dark,
-                      onChanged: (bool value) {
-                        // Implementación futura con un ThemeProvider
-                      },
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.palette),
-                      title: const Text('Color de Sistema'),
-                      subtitle: const Text('Teal (Predeterminado)'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {},
-                    ),
-                  ],
                 ),
               ),
             ],

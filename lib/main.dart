@@ -143,7 +143,7 @@ class _MainScreenState extends State<MainScreen> {
           Consumer(builder: (context, ref, _) {
             final syncCount = ref.watch(pendingSyncCountProvider);
             return syncCount.when(
-              data: (count) => count > 0 
+              data: (count) => count > 0
                 ? IconButton(
                     icon: Badge(label: Text('$count'), child: const Icon(Icons.cloud_off, color: Colors.orange)),
                     onPressed: () => ref.read(syncServiceProvider).forceSync(),
@@ -157,18 +157,84 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       body: _pages[_selectedIndex],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.inventory), label: 'Stock'),
-          NavigationDestination(icon: Icon(Icons.shopping_cart), label: 'POS'),
-          NavigationDestination(icon: Icon(Icons.analytics), label: 'Reportes'),
-          NavigationDestination(icon: Icon(Icons.receipt), label: 'Ventas'),
-          NavigationDestination(icon: Icon(Icons.pending), label: 'Pagos'),
-          NavigationDestination(icon: Icon(Icons.list), label: 'Movs'),
-          NavigationDestination(icon: Icon(Icons.settings), label: 'Ajustes'),
-        ],
+      endDrawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(color: Colors.teal),
+              child: Center(
+                child: Text(
+                  'Menú Principal',
+                  style: TextStyle(color: Colors.white, fontSize: 24),
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.inventory),
+              title: const Text('Stock'),
+              selected: _selectedIndex == 0,
+              onTap: () {
+                setState(() => _selectedIndex = 0);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.shopping_cart),
+              title: const Text('POS'),
+              selected: _selectedIndex == 1,
+              onTap: () {
+                setState(() => _selectedIndex = 1);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.analytics),
+              title: const Text('Reportes'),
+              selected: _selectedIndex == 2,
+              onTap: () {
+                setState(() => _selectedIndex = 2);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.receipt),
+              title: const Text('Ventas'),
+              selected: _selectedIndex == 3,
+              onTap: () {
+                setState(() => _selectedIndex = 3);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.pending),
+              title: const Text('Pagos'),
+              selected: _selectedIndex == 4,
+              onTap: () {
+                setState(() => _selectedIndex = 4);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list),
+              title: const Text('Movs'),
+              selected: _selectedIndex == 5,
+              onTap: () {
+                setState(() => _selectedIndex = 5);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Ajustes'),
+              selected: _selectedIndex == 6,
+              onTap: () {
+                setState(() => _selectedIndex = 6);
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

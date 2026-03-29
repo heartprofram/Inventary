@@ -78,7 +78,10 @@ class SyncService {
           isSyncing: true,
         );
         await _localStorage.removePendingInventoryUpdate(update['queue_key']);
-      } catch (_) { break; }
+      } catch (e, stack) { 
+        debugPrint('Error en sync: $e \n $stack'); 
+        break; 
+      }
     }
   }
 
@@ -88,7 +91,10 @@ class SyncService {
       try {
         await _salesRepo.resyncSale(saleJson);
         await _localStorage.removePendingSale(saleJson['id_venta'].toString());
-      } catch (_) { break; }
+      } catch (e, stack) { 
+        debugPrint('Error en sync: $e \n $stack'); 
+        break; 
+      }
     }
   }
 
@@ -98,7 +104,10 @@ class SyncService {
       try {
         await _movementRepo.resyncMovement(mov);
         await _localStorage.removePendingMovement(mov['id'].toString());
-      } catch (_) { break; }
+      } catch (e, stack) { 
+        debugPrint('Error en sync: $e \n $stack'); 
+        break; 
+      }
     }
   }
 
