@@ -20,13 +20,14 @@ class SettingsScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Sección de Tasa de Cambio
-              _buildSectionHeader('TASA DE CAMBIO'),
+              // 1. SECCIÓN: TASA DE CAMBIO BCV
+              _buildSectionHeader('TASA DE CAMBIO BCV'),
               const SizedBox(height: 12),
               exchangeRateState.when(
                 data: (rate) {
                   return Card(
                     elevation: 2,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -36,17 +37,16 @@ class SettingsScreen extends ConsumerWidget {
                             children: [
                               const Text('Tasa Actual:', style: TextStyle(fontSize: 18)),
                               Text('Bs. ${rate.rate.toStringAsFixed(2)}', 
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.teal)),
                             ],
                           ),
                           const SizedBox(height: 8),
                           Text('Última actualización: ${rate.lastUpdated.toString().substring(0, 16)}', 
-                            style: const TextStyle(color: Colors.grey)),
+                            style: const TextStyle(color: Colors.grey, fontSize: 13)),
                           const SizedBox(height: 24),
-                          // REEMPLAZO DE ROW POR WRAP PARA EVITAR OVERFLOW
                           Wrap(
-                            spacing: 8.0,
-                            runSpacing: 8.0,
+                            spacing: 12.0,
+                            runSpacing: 12.0,
                             alignment: WrapAlignment.center,
                             children: [
                               ElevatedButton.icon(
@@ -54,14 +54,18 @@ class SettingsScreen extends ConsumerWidget {
                                   ref.read(exchangeRateProvider.notifier).fetchBcvRate();
                                 },
                                 icon: const Icon(Icons.sync),
-                                label: const Text('Tasa Automática (BCV)'),
+                                label: const Text('Actualizar del BCV'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.teal.shade50,
+                                  foregroundColor: Colors.teal,
+                                ),
                               ),
                               ElevatedButton.icon(
                                 onPressed: () {
                                   _showManualRateDialog(context, ref, rate.rate);
                                 },
-                                icon: const Icon(Icons.edit),
-                                label: const Text('Tasa Manual'),
+                                icon: const Icon(Icons.edit_note),
+                                label: const Text('Ajuste Manual'),
                               ),
                             ],
                           )
@@ -71,7 +75,7 @@ class SettingsScreen extends ConsumerWidget {
                   );
                 },
                 loading: () => const Center(child: Padding(
-                  padding: EdgeInsets.all(20.0),
+                  padding: EdgeInsets.all(40.0),
                   child: CircularProgressIndicator(),
                 )),
                 error: (err, stack) => Card(
@@ -80,7 +84,9 @@ class SettingsScreen extends ConsumerWidget {
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       children: [
-                        Text('Error: $err', style: const TextStyle(color: Colors.red)),
+                        const Icon(Icons.error_outline, color: Colors.red, size: 40),
+                        const SizedBox(height: 12),
+                        Text('Error al cargar tasa: $err', style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () => ref.read(exchangeRateProvider.notifier).fetchBcvRate(),
@@ -94,39 +100,33 @@ class SettingsScreen extends ConsumerWidget {
 
               const SizedBox(height: 32),
 
-              // NUEVA SECCIÓN: CONEXIÓN
-              _buildSectionHeader('CONEXIÓN'),
+              // 2. SECCIÓN: APARIENCIA
+              _buildSectionHeader('APARIENCIA'),
               const SizedBox(height: 12),
               Card(
                 elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Servidor Proxy Web', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      const Text('Estado: Activo (localhost:8081)', style: TextStyle(color: Colors.green, fontSize: 13)),
-                      const SizedBox(height: 16),
-                      // REEMPLAZO DE ROW POR WRAP PARA EVITAR OVERFLOW
-                      Wrap(
-                        spacing: 8.0,
-                        runSpacing: 8.0,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () {}, // Acción para refrescar proxy
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Verificar Proxy'),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: () {}, // Acción para configurar IP
-                            icon: const Icon(Icons.settings_ethernet),
-                            label: const Text('Configurar IP'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      activeColor: Colors.teal,
+                      title: const Text('Modo Oscuro'),
+                      subtitle: const Text('Activar el tema visual nocturno'),
+                      secondary: const Icon(Icons.dark_mode),
+                      value: Theme.of(context).brightness == Brightness.dark,
+                      onChanged: (bool value) {
+                        // Implementación futura con un ThemeProvider
+                      },
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.palette),
+                      title: const Text('Color de Sistema'),
+                      subtitle: const Text('Teal (Predeterminado)'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {},
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -141,10 +141,10 @@ class SettingsScreen extends ConsumerWidget {
       padding: const EdgeInsets.only(left: 4.0),
       child: Text(
         title,
-        style: const TextStyle(
-          fontSize: 14,
+        style: TextStyle(
+          fontSize: 13,
           fontWeight: FontWeight.bold,
-          color: Colors.blueGrey,
+          color: Colors.teal.shade700,
           letterSpacing: 1.2,
         ),
       ),
@@ -158,17 +158,19 @@ class SettingsScreen extends ConsumerWidget {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Ingresar Tasa Manual'),
+          title: const Text('Establecer Tasa Manual'),
           content: TextField(
             controller: controller,
+            autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
             decoration: const InputDecoration(
-              labelText: 'Tasa (VES)',
+              labelText: 'Nueva Tasa (VES)',
               prefixText: 'Bs. ',
+              border: OutlineInputBorder(),
             ),
           ),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -182,7 +184,11 @@ class SettingsScreen extends ConsumerWidget {
                   Navigator.pop(context);
                 }
               },
-              child: const Text('Guardar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Guardar Tasa'),
             ),
           ],
         );

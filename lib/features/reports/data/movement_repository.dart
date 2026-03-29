@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:dio/dio.dart';
 import 'package:googleapis/sheets/v4.dart' as sheets;
-import 'package:hive/hive.dart';
 import '../../../core/services/google_api_service.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/constants/app_constants.dart';
@@ -52,20 +51,18 @@ class MovementRepository {
 
         // GUARDADO EN CACHE SI RED TIENE ÉXITO
         if (rows.isNotEmpty) {
-          final box = Hive.box('movements_cache');
-          await box.put('mov_cache', rows);
+          await localStorageService.saveCache('movements_cache', 'mov_cache', rows);
         }
       } catch (networkError) {
         debugPrint('[MovementRepo] Error de red, cargando movimientos de cache local: $networkError');
         // RESCATE DE CACHE SI RED FALLA
-        final box = Hive.box('movements_cache');
-        rows = box.get('mov_cache', defaultValue: []);
+        rows = await localStorageService.getCache('movements_cache', 'mov_cache', defaultValue: []);
       }
       
       return rows.where((row) => row.length >= 6).map((row) {
         return Movement(
           id: row[0].toString(),
-          date: DateTime.parse(row[1].toString()),
+          date: DateTime.tryParse(row[1].toString()) ?? DateTime.now(),
           type: row[2].toString(),
           description: row[3].toString(),
           amountUSD: double.tryParse(row[4].toString()) ?? 0.0,

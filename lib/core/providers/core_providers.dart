@@ -26,7 +26,8 @@ final localStorageServiceProvider = Provider<LocalStorageService>((ref) {
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
   final dio = ref.watch(dioProvider);
   final googleApi = ref.watch(googleApiServiceProvider);
-  return ProductRepository(dio: dio, googleApi: googleApi);
+  final localStorage = ref.watch(localStorageServiceProvider);
+  return ProductRepository(dio: dio, googleApi: googleApi, localStorageService: localStorage);
 });
 
 // Repositorio de Ventas (Híbrido)
@@ -47,7 +48,8 @@ final salesRepositoryProvider = Provider<SalesRepository>((ref) {
 final reportsRepositoryProvider = Provider<ReportsRepository>((ref) {
   final dio = ref.watch(dioProvider);
   final googleApi = ref.watch(googleApiServiceProvider);
-  return ReportsRepository(dio: dio, googleApi: googleApi);
+  final localStorage = ref.watch(localStorageServiceProvider);
+  return ReportsRepository(dio: dio, googleApi: googleApi, localStorageService: localStorage);
 });
 
 // Repositorio de Movimientos (Híbrido)

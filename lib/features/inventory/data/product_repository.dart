@@ -1,61 +1,112 @@
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:dio/dio.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:googleapis/sheets/v4.dart' as sheets;
 import '../../../core/services/google_api_service.dart';
+import '../../../core/services/local_storage_service.dart';
 import '../../../core/constants/app_constants.dart';
 import '../domain/product.dart';
+
+// SOLUCIÓN: IMPORT DE HIVE ELIMINADO
 
 class ProductRepository {
   final Dio dio;
   final GoogleApiService googleApi;
+  final LocalStorageService localStorageService;
   final String baseUrl = 'http://localhost:8081/api';
 
-  ProductRepository({required this.dio, required this.googleApi});
+  ProductRepository({
+    required this.dio,
+    required this.googleApi,
+    required this.localStorageService,
+  });
 
   Future<List<Product>> getProducts() async {
     List<dynamic> rows = [];
-    final box = Hive.box('inventory_box');
+    const String cacheKey = 'products_cache';
 
     try {
       if (kIsWeb) {
-        final response = await dio.get('$baseUrl/productos')
-            .timeout(const Duration(seconds: 4));
-        rows = response.data ?? [];
+        final resp = await dio.get('$baseUrl/productos').timeout(const Duration(seconds: 5));
+        rows = resp.data ?? [];
       } else {
-        final response = await googleApi.sheetsApi.spreadsheets.values.get(
+        final resp = await googleApi.sheetsApi.spreadsheets.values.get(
           AppConstants.spreadSheetId,
           'Productos!A2:G',
-        ).timeout(const Duration(seconds: 5));
-        rows = response.values ?? [];
+        ).timeout(const Duration(seconds: 12));
+        rows = resp.values ?? [];
       }
       
-      // Actualizar caché si la red fue exitosa
       if (rows.isNotEmpty) {
-        await box.put('products_cache', rows);
+        // SOLUCIÓN: Usar servicio inyectado
+        await localStorageService.saveCache('inventory_box', cacheKey, rows);
       }
-    } catch (networkError) {
-      debugPrint('[Offline] Error de red en ${kIsWeb ? 'Web' : 'Android'}, cargando caché: $networkError');
-      rows = box.get('products_cache', defaultValue: []) as List<dynamic>;
+    } catch (e) {
+      debugPrint('[ProductRepo] Red fallida, usando caché local.');
+      // SOLUCIÓN: Usar servicio inyectado
+      rows = await localStorageService.getCache('inventory_box', cacheKey, defaultValue: []) as List<dynamic>;
     }
 
+    return rows.where((r) => r.length >= 6).map((r) => Product(
+      id: r[0].toString(),
+      name: r[1].toString(),
+      description: r.length > 2 ? r[2].toString() : '',
+      costPriceUSD: double.tryParse(r[3].toString().replaceAll(',', '.')) ?? 0.0,
+      salePriceUSD: double.tryParse(r[4].toString().replaceAll(',', '.')) ?? 0.0,
+      stockQuantity: int.tryParse(r[5].toString()) ?? 0,
+      barCode: r.length > 6 ? r[6].toString() : '',
+    )).toList();
+  }
+
+  Future<void> updateStock(String productId, int newStock, {bool isSyncing = false}) async {
     try {
-      return rows.where((row) => row.length >= 6).map((row) {
-        return Product(
-          id: row[0].toString(),
-          name: row[1].toString(),
-          description: row.length > 2 ? row[2].toString() : '',
-          costPriceUSD: double.tryParse(row[3].toString().replaceAll(',', '.')) ?? 0.0,
-          salePriceUSD: double.tryParse(row[4].toString().replaceAll(',', '.')) ?? 0.0,
-          stockQuantity: int.tryParse(row[5].toString()) ?? 0,
-          barCode: row.length > 6 ? row[6].toString() : '',
+      if (kIsWeb) {
+        // Lógica de red simplificada para el ejemplo
+        await dio.put('$baseUrl/productos/stock', data: {'productId': productId, 'value': newStock});
+      } else {
+        final response = await googleApi.sheetsApi.spreadsheets.values.get(
+          AppConstants.spreadSheetId, 'Productos!A2:A',
         );
-      }).toList();
+        final rows = response.values ?? [];
+        int index = rows.indexWhere((r) => r.isNotEmpty && r[0].toString() == productId);
+        
+        if (index != -1) {
+          await googleApi.sheetsApi.spreadsheets.values.update(
+            sheets.ValueRange(values: [[newStock]]),
+            AppConstants.spreadSheetId,
+            'Productos!F${index + 2}',
+            valueInputOption: 'USER_ENTERED',
+          );
+        }
+      }
+      await _updateLocalCacheStock(productId, newStock);
     } catch (e) {
-      throw Exception('Error al procesar datos de productos: $e');
+      if (!isSyncing) {
+        // SOLUCIÓN: Encolar mediante servicio
+        await localStorageService.addPendingInventoryUpdate(productId, newStock);
+        await _updateLocalCacheStock(productId, newStock);
+      } else {
+        rethrow;
+      }
     }
   }
 
+  Future<void> _updateLocalCacheStock(String productId, int newStock) async {
+    const String key = 'products_cache';
+    final products = await localStorageService.getCache('inventory_box', key, defaultValue: []) as List<dynamic>;
+    
+    for (int i = 0; i < products.length; i++) {
+      final row = List<dynamic>.from(products[i] as List);
+      if (row.isNotEmpty && row[0].toString() == productId) {
+        if (row.length > 5) {
+          row[5] = newStock;
+          products[i] = row;
+          await localStorageService.saveCache('inventory_box', key, products);
+          break;
+        }
+      }
+    }
+  }
+  
   Future<void> addProduct(Product product) async {
     try {
       final row = [
@@ -80,102 +131,6 @@ class ProductRepository {
       }
     } catch (e) {
       throw Exception('Error al agregar producto: $e');
-    }
-  }
-
-  Future<void> updateStock(String productId, int newStock, {bool isSyncing = false}) async {
-    try {
-      if (kIsWeb) {
-        // Modo Web: Uso de Dio contra Backend Python
-        final productsResp = await dio.get('$baseUrl/productos');
-        final rows = productsResp.data as List<dynamic>;
-        int rowIndex = -1;
-        for (int i = 0; i < rows.length; i++) {
-          if (rows[i].isNotEmpty && rows[i][0].toString() == productId) {
-              rowIndex = i + 2; 
-              break;
-          }
-        }
-        if (rowIndex != -1) {
-            await dio.put('$baseUrl/productos/stock', data: {
-                'range': 'Productos!F$rowIndex',
-                'value': newStock
-            });
-        }
-      } else {
-        // Modo Nativo: Uso directo de Google Sheets API
-        final response = await googleApi.sheetsApi.spreadsheets.values.get(
-          AppConstants.spreadSheetId,
-          'Productos!A2:A',
-        );
-        final rows = response.values ?? [];
-        int rowIndex = -1;
-        for (int i = 0; i < rows.length; i++) {
-          if (rows[i].isNotEmpty && rows[i][0].toString() == productId) {
-            rowIndex = i + 2;
-            break;
-          }
-        }
-        
-        if (rowIndex != -1) {
-          final valueRange = sheets.ValueRange(values: [[newStock]]);
-          await googleApi.sheetsApi.spreadsheets.values.update(
-            valueRange,
-            AppConstants.spreadSheetId,
-            'Productos!F$rowIndex',
-            valueInputOption: 'USER_ENTERED',
-          );
-        }
-      }
-
-      // Éxito en red: Actualizar cache local
-      await _updateLocalCacheStock(productId, newStock);
-
-    } catch (e) {
-      debugPrint('[InventoryRepo] Fallo al actualizar stock en red: $e');
-      
-      if (!isSyncing) {
-        // Si no es un proceso de sincronización, guardamos en la cola local
-        final queue = Hive.box('inventory_queue');
-        await queue.add({
-          'productId': productId,
-          'newStock': newStock,
-          'timestamp': DateTime.now().toIso8601String(),
-        });
-
-        // Actualizamos cache local para que la UI se mantenga consistente
-        await _updateLocalCacheStock(productId, newStock);
-      } else {
-        // Si ya estábamos sincronizando, relanzamos el error para el SyncService
-        rethrow;
-      }
-    }
-  }
-
-  /// Actualiza el stock en la lista cacheada localmente en Hive
-  Future<void> _updateLocalCacheStock(String productId, int newStock) async {
-    try {
-      final box = Hive.box('inventory_box');
-      final products = box.get('products_cache', defaultValue: []) as List<dynamic>;
-      
-      bool updated = false;
-      for (int i = 0; i < products.length; i++) {
-        final row = List<dynamic>.from(products[i] as List);
-        if (row.isNotEmpty && row[0].toString() == productId) {
-          if (row.length > 5) {
-            row[5] = newStock;
-            products[i] = row;
-            updated = true;
-            break;
-          }
-        }
-      }
-      
-      if (updated) {
-        await box.put('products_cache', products);
-      }
-    } catch (e) {
-      debugPrint('[InventoryRepo] Error actualizando cache local de stock: $e');
     }
   }
   

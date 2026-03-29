@@ -34,7 +34,7 @@ class ReportsNotifier extends AsyncNotifier<DailyReportMetrics> {
 
   Future<DailyReportMetrics> _fetchTodayMetrics() async {
     final repo = ref.read(reportsRepositoryProvider);
-    final sales = await repo.getDailySales();
+    final sales = await repo.getDailySales(DateTime.now());
 
     final totalUSD = sales.fold(0.0, (sum, sale) => sum + sale.totalUSD);
     final totalVES = sales.fold(0.0, (sum, sale) => sum + (sale.totalVES > 0 ? sale.totalVES : sale.totalUSD * sale.exchangeRate));

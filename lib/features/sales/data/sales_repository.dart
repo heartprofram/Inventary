@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:dio/dio.dart';
 import 'package:googleapis/sheets/v4.dart' as sheets;
-import 'package:hive/hive.dart';
 import '../../../core/services/google_api_service.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/constants/app_constants.dart';
@@ -297,16 +296,14 @@ class SalesRepository {
 
         // GUARDADO EN CACHE SI RED TIENE ÉXITO
         if (ventasRows.isNotEmpty) {
-          final box = Hive.box('sales_cache');
-          await box.put('ventas_cache', ventasRows);
-          await box.put('detalles_cache', detallesRows);
+          await localStorageService.saveCache('sales_cache', 'ventas_cache', ventasRows);
+          await localStorageService.saveCache('sales_cache', 'detalles_cache', detallesRows);
         }
       } catch (networkError) {
         debugPrint('[SalesRepo] Error de red, cargando de cache local: $networkError');
         // RESCATE DE CACHE SI RED FALLA
-        final box = Hive.box('sales_cache');
-        ventasRows = box.get('ventas_cache', defaultValue: []);
-        detallesRows = box.get('detalles_cache', defaultValue: []);
+        ventasRows = await localStorageService.getCache('sales_cache', 'ventas_cache', defaultValue: []);
+        detallesRows = await localStorageService.getCache('sales_cache', 'detalles_cache', defaultValue: []);
       }
 
       final Map<String, List<SaleDetail>> detailsMap = {};
