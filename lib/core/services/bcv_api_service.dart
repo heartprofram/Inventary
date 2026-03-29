@@ -1,26 +1,33 @@
-import 'package:dio/dio.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../features/settings/domain/exchange_rate.dart';
 
 class BcvApiService {
-  final Dio _dio = Dio();
   Future<ExchangeRate> getCurrentRate() async {
     try {
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      Response response;
       if (kIsWeb) {
-        response = await _dio.get('http://localhost:8081/api/tasa?t=$timestamp',
-          options: Options(headers: {'Cache-Control': 'no-cache'}));
+        // LÓGICA WEB: Consulta a tu servidor Python (servidor.py)
+        final response = await http.get(Uri.parse('http://localhost:8081/api/tasa'));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          return ExchangeRate(rate: (data['promedio'] as num).toDouble(), lastUpdated: DateTime.now());
+        }
+        throw Exception('Error al obtener tasa desde el servidor Web');
       } else {
-        response = await _dio.get('https://ve.dolarapi.com/v1/dolares/oficial',
-          options: Options(headers: {'Cache-Control': 'no-cache'}));
+        // LÓGICA APK/NATIVA: Consulta a DolarAPI directamente de forma autónoma
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final url = Uri.parse('https://ve.dolarapi.com/v1/dolares/oficial?t=$timestamp');
+        final response = await http.get(url, headers: {'User-Agent': 'Mozilla/5.0'}).timeout(const Duration(seconds: 10));
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          return ExchangeRate(rate: (data['promedio'] as num).toDouble(), lastUpdated: DateTime.now());
+        }
+        throw Exception('Error al obtener tasa desde DolarAPI');
       }
-      if (response.statusCode == 200) {
-        final data = response.data;
-        double rate = 0.0;
-        try { rate = (data['promedio'] ?? 0.0).toDouble(); } catch (_) { rate = 0.0; }
-        return ExchangeRate(rate: rate, lastUpdated: DateTime.now());
-      } else { throw Exception('Error al obtener tasa. Status: ${response.statusCode}'); }
-    } catch (e) { throw Exception('Excepción al conectar con la API: $e'); }
+    } catch (e) {
+      throw Exception('Error de conexión al obtener tasa: $e');
+    }
   }
 }
