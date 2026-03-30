@@ -112,40 +112,42 @@ class InventoryScreen extends ConsumerWidget {
                             const SizedBox(height: 2),
                             Text('ID: ${product.id}', style: const TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic)),
                             const SizedBox(height: 8),
-                            Row(
+                            Wrap(
+                              spacing: 8,
                               children: [
                                 _buildBadge('P.V: \$${product.salePriceUSD}', Colors.green),
-                                const SizedBox(width: 8),
                                 _buildBadge(
                                   'Stock: ${product.stockQuantity}', 
                                   isLowStock ? Colors.red : Colors.blueGrey,
                                   isBold: isLowStock,
                                 ),
-                                const Spacer(),
-                                // NUEVO BOTÓN PARA EDITAR
-                                IconButton(
-                                  onPressed: () => _navigateToEdit(context, product),
-                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue),
-                                  tooltip: 'Editar Producto',
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: Colors.blue.withOpacity(0.1),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                // BOTÓN EXISTENTE PARA SURTIR
-                                IconButton(
-                                  onPressed: () => _showSurtirDialog(context, ref, product),
-                                  icon: const Icon(Icons.add_business_outlined, color: Colors.teal),
-                                  tooltip: 'Surtir Stock',
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: Colors.teal.withOpacity(0.1),
-                                  ),
-                                ),
                               ],
                             ),
                           ],
                         ),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                        // BOTONES SIMÉTRICOS A LA DERECHA
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: () => _navigateToEdit(context, product),
+                              icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                              tooltip: 'Editar Producto',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.blue.withOpacity(0.1),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: () => _showSurtirDialog(context, ref, product),
+                              icon: const Icon(Icons.add_business_outlined, color: Colors.teal),
+                              tooltip: 'Surtir Stock',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.teal.withOpacity(0.1),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },

@@ -10,7 +10,8 @@ import '../providers/pending_payments_provider.dart';
 import '../../domain/entities/payment.dart';
 import '../../domain/sale.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
-import '../../../reports/presentation/providers/reports_provider.dart';
+import 'package:inventary/features/reports/presentation/providers/reports_provider.dart';
+
 
 class PendingPaymentsScreen extends ConsumerStatefulWidget {
   const PendingPaymentsScreen({super.key});
@@ -799,10 +800,9 @@ class _MixedDebtPaymentDialogState
           .read(pendingPaymentsProvider.notifier)
           .updatePendingStatus(widget.pending.idVenta, finalPayments);
 
-      // ¡LA SOLUCIÓN DE REFRESCO!
-      // Obligamos a todas las pantallas a recargar la información nueva al instante
-      ref.invalidate(salesHistoryProvider);
+      // ARREGLO PUNTOS 5 Y 6: Obligar a las pantallas a recargar inmediatamente
       ref.invalidate(reportsProvider);
+      ref.invalidate(salesHistoryProvider);
       ref.invalidate(pendingPaymentsProvider);
 
       if (context.mounted) {

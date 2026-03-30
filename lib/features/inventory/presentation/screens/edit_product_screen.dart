@@ -182,10 +182,58 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
                       onPressed: _updateProduct,
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.delete_outline, color: Colors.white),
+                      label: const Text('Eliminar Producto', style: TextStyle(fontSize: 16)),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                        side: BorderSide.none,
+                      ),
+                      onPressed: () => _confirmDelete(context),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar Producto?'),
+        content: const Text('Esta acción quitará el producto del catálogo y no se puede deshacer.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _isLoading = true);
+              try {
+                await ref.read(productRepositoryProvider).deleteProduct(widget.product.id);
+                ref.invalidate(inventoryProvider);
+                if (mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Producto eliminado')));
+                   Navigator.pop(context);
+                }
+              } catch (e) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+              } finally {
+                if (mounted) setState(() => _isLoading = false);
+              }
+            },
+            child: const Text('Eliminar definitivamente', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 }

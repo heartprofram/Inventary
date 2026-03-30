@@ -1,10 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 import '../../../sales/domain/sale.dart';
+import '../../../sales/domain/entities/payment.dart'; // <-- IMPORTACIÓN FALTANTE AGREGADA
 import '../../../../core/utils/pdf_invoice_generator.dart';
 import '../../../../core/providers/core_providers.dart';
-
-// El repository provider ahora se encuentra en core_providers.dart
 
 // Estructura de métricas diarias
 class DailyReportMetrics {
@@ -45,14 +44,14 @@ class ReportsNotifier extends AsyncNotifier<DailyReportMetrics> {
     for (final sale in sales) {
       totalUSD += sale.totalUSD;
       for (final payment in sale.payments) {
-        final label = PaymentMethods.label(payment.method);
+        final label = payment.method; // <-- CORREGIDO (Sin el .label() que causaba error)
         
         paymentsUSD.update(label, (v) => v + payment.amount, ifAbsent: () => payment.amount);
         
         // Lógica de separación: Efectivo USD no se convierte a VES para el total de bolívares en caja
-        if (payment.method == PaymentMethods.efectivoUsd) {
+        if (payment.method == PaymentMethods.efectivoUsd || payment.method == 'Efectivo USD') {
           paymentsVES.update(label, (v) => v + 0.0, ifAbsent: () => 0.0);
-        } else if (payment.method != PaymentMethods.pendiente) {
+        } else if (payment.method != PaymentMethods.pendiente && payment.method != 'Pendiente (Por Cobrar)') {
           final amountVES = payment.amount * sale.exchangeRate;
           totalVESBS += amountVES;
           paymentsVES.update(label, (v) => v + amountVES, ifAbsent: () => amountVES);
@@ -68,7 +67,6 @@ class ReportsNotifier extends AsyncNotifier<DailyReportMetrics> {
       paymentsVES: paymentsVES,
     );
   }
-
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();

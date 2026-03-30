@@ -8,6 +8,9 @@ import '../providers/cart_provider.dart';
 import '../../../inventory/presentation/providers/inventory_provider.dart';
 import '../../../inventory/domain/product.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
+import 'package:inventary/features/reports/presentation/providers/reports_provider.dart';
+
+
 
 // salesRepositoryProvider ya está definido en core_providers.dart
 
@@ -64,6 +67,10 @@ class CheckoutNotifier extends AsyncNotifier<void> {
       ref.read(paymentsProvider.notifier).clearPayments();
       ref.read(debtorNameProvider.notifier).state = null;
       ref.read(inventoryProvider.notifier).refresh();
+      
+      // ARREGLO PUNTO 6: Refrescar cierre de caja e historial al vender
+      ref.invalidate(reportsProvider);
+      ref.invalidate(salesHistoryProvider);
       
       state = const AsyncValue.data(null);
     } catch (e) {

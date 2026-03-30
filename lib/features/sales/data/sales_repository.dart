@@ -25,9 +25,6 @@ class SalesRepository {
 
   Future<void> processSale(Sale sale) async {
     try {
-      // LLAMADA INMEDIATA A RED/OFFLINE PARA PROTEGER LA VENTA
-      // Se eliminó cualquier bucle previo de descuento de stock para dar prioridad a la persistencia.
-      
       final ventaRow = [
         sale.id,
         sale.date.toIso8601String(),
@@ -47,6 +44,10 @@ class SalesRepository {
         d.unitPriceUSD,
         d.subtotalUSD
       ]).toList();
+
+      // ARREGLO PUNTO 8: Descontar stock PRIMERO. 
+      // Así la memoria local se actualiza al instante, haya o no internet.
+      await _deductStock(sale.details);
 
       await _sendSaleToNetwork(sale, ventaRow, detallesRows);
     } catch (e) {
@@ -113,12 +114,6 @@ class SalesRepository {
           'DetalleVentas!A:F',
           valueInputOption: 'USER_ENTERED',
         ).timeout(const Duration(seconds: 10)); 
-      }
-
-      try {
-        await _deductStock(sale.details);
-      } catch (stockError) {
-        debugPrint('[SalesRepo] Error al actualizar stock: $stockError');
       }
 
     } catch (networkError) {

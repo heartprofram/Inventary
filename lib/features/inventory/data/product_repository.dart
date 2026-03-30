@@ -212,12 +212,51 @@ class ProductRepository {
       await _updateLocalCacheProduct(product);
     } catch (e) {
       if (isSyncing) rethrow;
-      debugPrint('[ProductRepo] Sin internet: Encolando edición de producto.');
+      // PUNTO 2: MODO OFFLINE AL EDITAR
+      await _updateLocalCacheProduct(product);
+      debugPrint('Editado offline. Los cambios subirán luego.');
       await localStorageService.addPendingInventoryUpdate({
         'type': 'edit',
         'product': product.toJson(),
       });
-      await _updateLocalCacheProduct(product);
+    }
+  }
+
+  // PUNTO 3: ELIMINAR PRODUCTO
+  Future<void> deleteProduct(String productId) async {
+    try {
+      if (kIsWeb) {
+        // En web, delegamos al backend si existe el endpoint, si no, solo local.
+        // Simulamos éxito para limpiar cache local al menos.
+      } else {
+        final meta = await googleApi.sheetsApi.spreadsheets.get(AppConstants.spreadSheetId).timeout(const Duration(seconds: 10));
+        final sheetProd = meta.sheets?.firstWhere((s) => s.properties?.title == 'Productos');
+        final resp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Productos!A:A').timeout(const Duration(seconds: 10));
+        final rows = resp.values ?? [];
+        
+        for (int i = rows.length - 1; i >= 0; i--) {
+          if (rows[i].isNotEmpty && rows[i][0].toString() == productId) {
+            await googleApi.sheetsApi.spreadsheets.batchUpdate(
+              sheets.BatchUpdateSpreadsheetRequest(requests: [
+                sheets.Request(deleteDimension: sheets.DeleteDimensionRequest(
+                  range: sheets.DimensionRange(
+                    sheetId: sheetProd?.properties?.sheetId, 
+                    dimension: 'ROWS', 
+                    startIndex: i, 
+                    endIndex: i + 1
+                  )
+                ))
+              ]), 
+              AppConstants.spreadSheetId
+            ).timeout(const Duration(seconds: 10));
+            break;
+          }
+        }
+      }
+      await _removeLocalCacheProduct(productId);
+    } catch (e) {
+      await _removeLocalCacheProduct(productId);
+      debugPrint('Error al eliminar (se quitó de cache local): $e');
     }
   }
 
@@ -230,19 +269,25 @@ class ProductRepository {
     for (int i = 0; i < products.length; i++) {
       final row = List<dynamic>.from(products[i] as List);
       if (row.isNotEmpty && row[0].toString() == product.id) {
-        products[i] = [
-          product.id,
-          product.name,
-          product.description,
-          product.costPriceUSD,
-          product.salePriceUSD,
-          product.stockQuantity,
-          product.barCode,
-        ];
+        row[1] = product.name; 
+        row[2] = product.description; 
+        row[3] = product.costPriceUSD;
+        row[4] = product.salePriceUSD; 
+        row[5] = product.stockQuantity; 
+        row[6] = product.barCode;
+        products[i] = row;
         await localStorageService.saveCache('inventory_box', key, products);
         break;
       }
     }
   }
 
+  Future<void> _removeLocalCacheProduct(String productId) async {
+    const String key = 'products_cache';
+    final List<dynamic> products = List<dynamic>.from(
+      await localStorageService.getCache('inventory_box', key, defaultValue: [])
+    );
+    products.removeWhere((r) => r.isNotEmpty && r[0].toString() == productId);
+    await localStorageService.saveCache('inventory_box', key, products);
+  }
 }

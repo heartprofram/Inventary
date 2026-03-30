@@ -366,164 +366,69 @@ class PdfInvoiceGenerator {
   // CIERRE Z - REPORTE DE CAJA (roll80)
   // ══════════════════════════════════════════════════════════════════════════
 
-  static Future<Uint8List> generateZReport(
-    List<Sale> sales, double totalUSD, double totalVES,
-  ) async {
-    final font = await PdfGoogleFonts.robotoRegular();
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final pdf = pw.Document(theme: pw.ThemeData.withFont(base: font, bold: fontBold));
-    final now = DateTime.now();
-    final fmt = DateFormat('dd/MM/yyyy  HH:mm');
+  static Future<Uint8List> generateZReport(List<Sale> sales, double totalUSD, double totalVES) async {
+    final pdf = pw.Document();
 
-    // ── Calcular resúmenes de pago por método ──────────────────────────────
-    final Map<String, double> paymentTotalsUSD = {};
-    final Map<String, double> paymentTotalsVES = {};
-    for (final sale in sales) {
-      for (final p in sale.payments) {
-        paymentTotalsUSD[p.method] = (paymentTotalsUSD[p.method] ?? 0) + p.amount;
-        paymentTotalsVES[p.method] = (paymentTotalsVES[p.method] ?? 0) + (p.amount * sale.exchangeRate);
+    // Recalcular pagos internamente para el PDF para asegurar que incluimos las deudas liquidadas
+    double totalEfectivoUSD = 0.0;
+    double totalBolivaresVES = 0.0;
+    Map<String, double> paymentMethodsUSD = {};
+
+    for (var sale in sales) {
+      for (var payment in sale.payments) {
+        final method = payment.method;
+        final amountUSD = payment.amount;
+
+        paymentMethodsUSD.update(method, (v) => v + amountUSD, ifAbsent: () => amountUSD);
+
+        if (method == 'Efectivo USD' || method == 'efectivoUsd') {
+          totalEfectivoUSD += amountUSD;
+        } else if (method != 'Pendiente (Por Cobrar)' && method != 'pendiente') {
+          totalBolivaresVES += (amountUSD * sale.exchangeRate);
+        }
       }
     }
 
-    pdf.addPage(pw.Page(
-      pageFormat: PdfPageFormat.roll80,
-      margin: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      build: (context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-          children: [
-            // ── Encabezado ──────────────────────────────────────────────
-            pw.Center(child: pw.Text('INVENTARY', style: pw.TextStyle(
-              fontSize: 14, fontWeight: pw.FontWeight.bold,
-              color: _kAccent, letterSpacing: 1.5,
-            ))),
-            pw.SizedBox(height: 2),
-            pw.Container(
-              padding: const pw.EdgeInsets.symmetric(vertical: 4),
-              color: _kAccent,
-              child: pw.Center(child: pw.Text('REPORTE CIERRE DE CAJA', style: pw.TextStyle(
-                fontSize: 9, fontWeight: pw.FontWeight.bold, color: _kWhite, letterSpacing: 1,
-              ))),
-            ),
-            pw.SizedBox(height: 6),
-            _kv('Fecha de cierre:', fmt.format(now), bold: true, size: 8),
-            pw.SizedBox(height: 8),
-
-            // ── Sección 1: Resumen de Ventas ─────────────────────────────
-            pw.Container(
-              color: _kGrey100,
-              padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 5),
-              child: pw.Text('>  RESUMEN DE VENTAS', style: _h3(color: _kPrimary)),
-            ),
-            pw.SizedBox(height: 4),
-
-            // Ventas detalladas
-            ...sales.expand((sale) => [
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _kPrimary, width: 0.5))),
-                child: pw.Row(
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        margin: const pw.EdgeInsets.all(10),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(child: pw.Text('REPORTE Z - CIERRE DE CAJA', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14))),
+              pw.Divider(),
+              pw.Text('Fecha: ${DateTime.now().toString().split('.')[0]}'),
+              pw.Text('Facturas emitidas: ${sales.length}'),
+              pw.Divider(),
+              pw.Text('RESUMEN DE INGRESOS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 5),
+              pw.Text('Total General (USD): \$${totalUSD.toStringAsFixed(2)}'),
+              pw.Text('Total Efectivo (USD): \$${totalEfectivoUSD.toStringAsFixed(2)}'),
+              pw.Text('Total en Cuentas (VES): Bs. ${totalBolivaresVES.toStringAsFixed(2)}'),
+              pw.Divider(),
+              pw.Text('DESGLOSE POR METODO DE PAGO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 5),
+              ...paymentMethodsUSD.entries.map((e) {
+                return pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('ID: ${sale.id.length > 10 ? sale.id.substring(sale.id.length - 8) : sale.id} | ${DateFormat('HH:mm').format(sale.date)}', style: _body(size: 8, color: _kAccent).copyWith(fontWeight: pw.FontWeight.bold)),
-                    pw.Text('\$${sale.totalUSD.toStringAsFixed(2)} / Bs. ${sale.totalVES.toStringAsFixed(2)}', style: _mono(size: 8, color: _kSuccess).copyWith(fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-              ),
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(left: 4, top: 2, bottom: 4),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                  children: sale.details.map((item) => pw.Row(
-                    children: [
-                      pw.Text('• ${item.quantity}x ', style: _body(size: 7.5, color: _kGrey600)),
-                      pw.Expanded(child: pw.Text(item.productName, style: _body(size: 7.5))),
-                      pw.Text('\$${item.subtotalUSD.toStringAsFixed(2)}', style: _mono(size: 7.5, color: _kGrey600)),
-                    ]
-                  )).toList(),
-                ),
-              ),
-            ]),
-            pw.SizedBox(height: 4),
-            _divider(color: _kGrey300),
-            _kv('Total de transacciones:', '${sales.length}', bold: true, size: 8),
-
-            pw.SizedBox(height: 8),
-
-            // ── Sección 2: Resumen de Pagos ──────────────────────────────
-            pw.Container(
-              color: _kGrey100,
-              padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 5),
-              child: pw.Text('>  RESUMEN POR MÉTODO DE PAGO', style: _h3(color: _kPrimary)),
-            ),
-            pw.SizedBox(height: 4),
-            ...paymentTotalsUSD.entries.expand((e) {
-              final vesVal = paymentTotalsVES[e.key] ?? 0.0;
-              return [
-                pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text('• ${PaymentMethods.label(e.key)}:', style: _body(color: _kGrey600, size: 8.5)),
-                      pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.end,
-                        children: [
-                          pw.Text('\$${e.value.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: _kSuccess)),
-                          pw.Text('Bs. ${vesVal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: _kAccent)),
-                        ]
-                      )
-                    ],
-                  ),
-                ),
-                pw.SizedBox(height: 2),
-              ];
-            }),
-
-            pw.SizedBox(height: 8),
-            _divider(color: _kAccent),
-
-            // ── Sección 3: Estado Final de Caja ──────────────────────────
-            pw.Container(
-              margin: const pw.EdgeInsets.symmetric(vertical: 6),
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: _kGrey100,
-                border: pw.Border.all(color: _kAccent, width: 1),
-                borderRadius: pw.BorderRadius.circular(4),
-              ),
-              child: pw.Column(children: [
-                pw.Center(child: pw.Text('TOTALES DEL PERÍODO', style: pw.TextStyle(
-                  fontSize: 8, fontWeight: pw.FontWeight.bold,
-                  color: _kAccent, letterSpacing: 1,
-                ))),
-                pw.SizedBox(height: 6),
-                _divider(),
-                pw.SizedBox(height: 6),
-                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                  pw.Text('TOTAL USD:', style: _h2(color: _kAccent)),
-                  pw.Text('\$${totalUSD.toStringAsFixed(2)}', style: pw.TextStyle(
-                    fontSize: 16, fontWeight: pw.FontWeight.bold, color: _kSuccess,
-                  )),
-                ]),
-                pw.SizedBox(height: 4),
-                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                  pw.Text('TOTAL VES:', style: _h2(color: _kAccent)),
-                  pw.Text('Bs. ${totalVES.toStringAsFixed(2)}', style: pw.TextStyle(
-                    fontSize: 14, fontWeight: pw.FontWeight.bold, color: _kSuccess,
-                  )),
-                ]),
-              ]),
-            ),
-
-            _ticketFooter('Cierre de caja completado — ${fmt.format(now)}'),
-          ],
-        );
-      },
-    ));
-
+                    pw.Text(e.key),
+                    pw.Text('\$${e.value.toStringAsFixed(2)}'),
+                  ]
+                );
+              }).toList(),
+              pw.Divider(),
+              pw.Center(child: pw.Text('*** FIN DEL REPORTE ***')),
+            ],
+          );
+        },
+      ),
+    );
     return pdf.save();
   }
+
 
   // ══════════════════════════════════════════════════════════════════════════
   // REPORTE DE VENTAS POR PERÍODO (A4)
