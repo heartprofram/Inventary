@@ -36,35 +36,39 @@ class ReportsNotifier extends AsyncNotifier<DailyReportMetrics> {
     final repo = ref.read(reportsRepositoryProvider);
     final sales = await repo.getDailySales(DateTime.now());
 
-    final totalUSD = sales.fold(0.0, (sum, sale) => sum + sale.totalUSD);
-    final totalVES = sales.fold(0.0, (sum, sale) => sum + (sale.totalVES > 0 ? sale.totalVES : sale.totalUSD * sale.exchangeRate));
-    
-    // Desglose por método de pago
+    double totalUSD = 0.0;
+    double totalVESBS = 0.0; // Solo lo que es BS (no Efectivo USD)
+
     final Map<String, double> paymentsUSD = {};
     final Map<String, double> paymentsVES = {};
+
     for (final sale in sales) {
+      totalUSD += sale.totalUSD;
       for (final payment in sale.payments) {
-        paymentsUSD.update(
-          PaymentMethods.label(payment.method),
-          (value) => value + payment.amount,
-          ifAbsent: () => payment.amount,
-        );
-        paymentsVES.update(
-          PaymentMethods.label(payment.method),
-          (value) => value + payment.amount * sale.exchangeRate,
-          ifAbsent: () => payment.amount * sale.exchangeRate,
-        );
+        final label = PaymentMethods.label(payment.method);
+        
+        paymentsUSD.update(label, (v) => v + payment.amount, ifAbsent: () => payment.amount);
+        
+        // Lógica de separación: Efectivo USD no se convierte a VES para el total de bolívares en caja
+        if (payment.method == PaymentMethods.efectivoUsd) {
+          paymentsVES.update(label, (v) => v + 0.0, ifAbsent: () => 0.0);
+        } else if (payment.method != PaymentMethods.pendiente) {
+          final amountVES = payment.amount * sale.exchangeRate;
+          totalVESBS += amountVES;
+          paymentsVES.update(label, (v) => v + amountVES, ifAbsent: () => amountVES);
+        }
       }
     }
 
     return DailyReportMetrics(
       sales: sales,
       totalUSD: totalUSD,
-      totalVES: totalVES,
+      totalVES: totalVESBS,
       paymentsUSD: paymentsUSD,
       paymentsVES: paymentsVES,
     );
   }
+
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();

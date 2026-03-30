@@ -9,6 +9,8 @@ import 'package:inventary/core/widgets/custom_snackbar.dart';
 import 'package:inventary/features/settings/presentation/providers/settings_provider.dart';
 import '../providers/inventory_provider.dart';
 import 'add_product_screen.dart';
+import 'edit_product_screen.dart';
+
 
 // Provider local para filtro de búsqueda en inventario
 final inventorySearchQueryProvider = StateProvider<String>((ref) => '');
@@ -120,6 +122,17 @@ class InventoryScreen extends ConsumerWidget {
                                   isBold: isLowStock,
                                 ),
                                 const Spacer(),
+                                // NUEVO BOTÓN PARA EDITAR
+                                IconButton(
+                                  onPressed: () => _navigateToEdit(context, product),
+                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                                  tooltip: 'Editar Producto',
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.blue.withOpacity(0.1),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // BOTÓN EXISTENTE PARA SURTIR
                                 IconButton(
                                   onPressed: () => _showSurtirDialog(context, ref, product),
                                   icon: const Icon(Icons.add_business_outlined, color: Colors.teal),
@@ -362,5 +375,9 @@ class InventoryScreen extends ConsumerWidget {
 
   void _navigateToAdd(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => const AddProductScreen()));
+  }
+
+  void _navigateToEdit(BuildContext context, Product product) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => EditProductScreen(product: product)));
   }
 }

@@ -17,5 +17,27 @@ class Product {
     required this.barCode,
   });
 
-  // Factory methods from/to Google Sheets rows mapping can be added here
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'costPriceUSD': costPriceUSD,
+      'salePriceUSD': salePriceUSD,
+      'stockQuantity': stockQuantity,
+      'barCode': barCode,
+    };
+  }
+
+  factory Product.fromJson(Map<String, dynamic> json) {
+    return Product(
+      id: json['id'],
+      name: json['name'],
+      description: json['description'],
+      costPriceUSD: (json['costPriceUSD'] as num).toDouble(),
+      salePriceUSD: (json['salePriceUSD'] as num).toDouble(),
+      stockQuantity: json['stockQuantity'] as int,
+      barCode: json['barCode'],
+    );
+  }
 }

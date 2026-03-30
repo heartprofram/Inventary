@@ -142,6 +142,9 @@ class _MainScreenState extends State<MainScreen> {
         title: const Text('Inventary'), // <-- Título principal cambiado
         actions: [
           Consumer(builder: (context, ref, _) {
+            // ESTA LÍNEA MANTIENE EL AUTO-SYNC DESPIERTO SIEMPRE
+            ref.watch(syncServiceProvider).start(); 
+            
             final syncCount = ref.watch(pendingSyncCountProvider);
             return syncCount.when(
               data: (count) => count > 0 

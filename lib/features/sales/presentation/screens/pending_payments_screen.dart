@@ -10,12 +10,14 @@ import '../providers/pending_payments_provider.dart';
 import '../../domain/entities/payment.dart';
 import '../../domain/sale.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
+import '../../../reports/presentation/providers/reports_provider.dart';
 
 class PendingPaymentsScreen extends ConsumerStatefulWidget {
   const PendingPaymentsScreen({super.key});
 
   @override
-  ConsumerState<PendingPaymentsScreen> createState() => _PendingPaymentsScreenState();
+  ConsumerState<PendingPaymentsScreen> createState() =>
+      _PendingPaymentsScreenState();
 }
 
 class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
@@ -35,7 +37,10 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Cuentas por Cobrar', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Cuentas por Cobrar',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.teal,
         elevation: 0,
@@ -46,8 +51,10 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
             return EmptyState(
               icon: Icons.check_circle_outline,
               title: 'Cuentas al día',
-              message: 'No hay deudas o pagos pendientes registrados actualmente.',
-              onAction: () => ref.read(pendingPaymentsProvider.notifier).refresh(),
+              message:
+                  'No hay deudas o pagos pendientes registrados actualmente.',
+              onAction: () =>
+                  ref.read(pendingPaymentsProvider.notifier).refresh(),
               actionLabel: 'Actualizar',
             );
           }
@@ -64,7 +71,9 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
               return Card(
                 elevation: 2,
                 margin: const EdgeInsets.only(bottom: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -81,12 +90,20 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  pending.deudor.trim().isNotEmpty ? pending.deudor : "Cliente Anónimo",
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                                  pending.deudor.trim().isNotEmpty
+                                      ? pending.deudor
+                                      : "Cliente Anónimo",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
                                 ),
                                 Text(
                                   pending.fecha,
-                                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ],
                             ),
@@ -96,11 +113,19 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
                             children: [
                               Text(
                                 '\$${pending.totalUsd.toStringAsFixed(2)}',
-                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Colors.redAccent),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 20,
+                                  color: Colors.redAccent,
+                                ),
                               ),
                               Text(
                                 'Bs. ${totalVes.toStringAsFixed(2)}',
-                                style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 13),
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                             ],
                           ),
@@ -112,24 +137,45 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
                         children: [
                           Text(
                             '${pending.detallesProductos.length} productos',
-                            style: const TextStyle(color: Colors.grey, fontSize: 13),
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 13,
+                            ),
                           ),
                           Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                ),
                                 tooltip: 'Eliminar deuda',
-                                onPressed: () => _showDeleteConfirmation(context, ref, pending, currentRate),
+                                onPressed: () => _showDeleteConfirmation(
+                                  context,
+                                  ref,
+                                  pending,
+                                  currentRate,
+                                ),
                               ),
                               const SizedBox(width: 8),
                               ElevatedButton.icon(
-                                onPressed: () => _showPaymentModal(context, ref, pending, currentRate),
-                                icon: const Icon(Icons.payments_outlined, size: 18),
+                                onPressed: () => _showPaymentModal(
+                                  context,
+                                  ref,
+                                  pending,
+                                  currentRate,
+                                ),
+                                icon: const Icon(
+                                  Icons.payments_outlined,
+                                  size: 18,
+                                ),
                                 label: const Text('PROCESAR PAGO'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.teal,
                                   foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                               ),
                             ],
@@ -144,7 +190,11 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
           );
         },
         loading: () => const ShimmerList(itemCount: 6),
-        error: (err, stack) => EmptyState(icon: Icons.error_outline, title: 'Error', message: err.toString()),
+        error: (err, stack) => EmptyState(
+          icon: Icons.error_outline,
+          title: 'Error',
+          message: err.toString(),
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showManualDebtDialog(context),
@@ -163,21 +213,34 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
     );
   }
 
-  void _showPaymentModal(BuildContext context, WidgetRef ref, PendingPayment pending, double rate) {
+  void _showPaymentModal(
+    BuildContext context,
+    WidgetRef ref,
+    PendingPayment pending,
+    double rate,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _MixedDebtPaymentDialog(pending: pending, rate: rate),
+      builder: (context) =>
+          _MixedDebtPaymentDialog(pending: pending, rate: rate),
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, WidgetRef ref, PendingPayment pending, double rate) {
+  void _showDeleteConfirmation(
+    BuildContext context,
+    WidgetRef ref,
+    PendingPayment pending,
+    double rate,
+  ) {
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
         title: const Text('Eliminar Deuda'),
-        content: const Text('¿Estás seguro de que deseas eliminar esta cuenta por cobrar?\n\nEsta acción no se puede deshacer y devolverá los productos al inventario.'),
+        content: const Text(
+          '¿Estás seguro de que deseas eliminar esta cuenta por cobrar?\n\nEsta acción no se puede deshacer y devolverá los productos al inventario.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
@@ -186,13 +249,21 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(dialogCtx);
-              showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) =>
+                    const Center(child: CircularProgressIndicator()),
+              );
               try {
                 final sale = pending.toSale(rate);
                 await ref.read(salesRepositoryProvider).deleteSale(sale);
                 ref.invalidate(pendingPaymentsProvider);
                 if (context.mounted) {
-                  CustomSnackBar.success(context, 'Deuda eliminada exitosamente.');
+                  CustomSnackBar.success(
+                    context,
+                    'Deuda eliminada exitosamente.',
+                  );
                 }
               } catch (e) {
                 if (context.mounted) {
@@ -204,7 +275,10 @@ class _PendingPaymentsScreenState extends ConsumerState<PendingPaymentsScreen> {
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Eliminar definitivamente'),
           ),
         ],
@@ -267,7 +341,9 @@ class _ManualDebtDialogState extends ConsumerState<ManualDebtDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Monto Total (USD)',
                 prefixIcon: Icon(Icons.attach_money),
@@ -278,8 +354,14 @@ class _ManualDebtDialogState extends ConsumerState<ManualDebtDialog> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.calendar_today, color: Colors.teal),
-              title: const Text('Fecha de la Deuda', style: TextStyle(fontSize: 14)),
-              subtitle: Text(DateFormat('dd / MM / yyyy').format(_selectedDate), style: const TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text(
+                'Fecha de la Deuda',
+                style: TextStyle(fontSize: 14),
+              ),
+              subtitle: Text(
+                DateFormat('dd / MM / yyyy').format(_selectedDate),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
               onTap: () async {
                 final picked = await showDatePicker(
                   context: context,
@@ -287,7 +369,11 @@ class _ManualDebtDialogState extends ConsumerState<ManualDebtDialog> {
                   firstDate: DateTime(2020),
                   lastDate: DateTime.now(),
                   builder: (context, child) => Theme(
-                    data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: Colors.teal)),
+                    data: Theme.of(context).copyWith(
+                      colorScheme: const ColorScheme.light(
+                        primary: Colors.teal,
+                      ),
+                    ),
                     child: child!,
                   ),
                 );
@@ -298,13 +384,26 @@ class _ManualDebtDialogState extends ConsumerState<ManualDebtDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+        ),
         ElevatedButton(
           onPressed: _isSaving ? null : _saveDebt,
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-          child: _isSaving 
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : const Text('Guardar'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal,
+            foregroundColor: Colors.white,
+          ),
+          child: _isSaving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Guardar'),
         ),
       ],
     );
@@ -317,7 +416,10 @@ class _ManualDebtDialogState extends ConsumerState<ManualDebtDialog> {
     final amount = double.tryParse(amountText);
 
     if (customer.isEmpty || concept.isEmpty || amount == null || amount <= 0) {
-      CustomSnackBar.warning(context, 'Por favor complete todos los campos correctamente.');
+      CustomSnackBar.warning(
+        context,
+        'Por favor complete todos los campos correctamente.',
+      );
       return;
     }
 
@@ -325,7 +427,7 @@ class _ManualDebtDialogState extends ConsumerState<ManualDebtDialog> {
 
     try {
       final exchangeRate = ref.read(exchangeRateProvider).value?.rate ?? 36.0;
-      
+
       final newSale = Sale(
         id: 'VEN-MANUAL-${DateTime.now().millisecondsSinceEpoch}',
         date: _selectedDate,
@@ -343,20 +445,20 @@ class _ManualDebtDialogState extends ConsumerState<ManualDebtDialog> {
       );
 
       await ref.read(salesRepositoryProvider).processSale(newSale);
-      
+
       if (mounted) {
         Navigator.pop(context);
         ref.invalidate(pendingPaymentsProvider);
         CustomSnackBar.success(context, 'Deuda manual registrada con éxito.');
       }
     } catch (e) {
-      if (mounted) CustomSnackBar.error(context, 'Error al registrar deuda: $e');
+      if (mounted)
+        CustomSnackBar.error(context, 'Error al registrar deuda: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 }
-
 
 class _MixedDebtPaymentDialog extends ConsumerStatefulWidget {
   final PendingPayment pending;
@@ -365,10 +467,12 @@ class _MixedDebtPaymentDialog extends ConsumerStatefulWidget {
   const _MixedDebtPaymentDialog({required this.pending, required this.rate});
 
   @override
-  ConsumerState<_MixedDebtPaymentDialog> createState() => _MixedDebtPaymentDialogState();
+  ConsumerState<_MixedDebtPaymentDialog> createState() =>
+      _MixedDebtPaymentDialogState();
 }
 
-class _MixedDebtPaymentDialogState extends ConsumerState<_MixedDebtPaymentDialog> {
+class _MixedDebtPaymentDialogState
+    extends ConsumerState<_MixedDebtPaymentDialog> {
   final _amountController = TextEditingController();
   String _selectedMethod = PaymentMethods.efectivoUsd;
   late double _remainingUSD;
@@ -405,7 +509,12 @@ class _MixedDebtPaymentDialogState extends ConsumerState<_MixedDebtPaymentDialog
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -413,68 +522,136 @@ class _MixedDebtPaymentDialogState extends ConsumerState<_MixedDebtPaymentDialog
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Abonar Cuenta', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              const Text(
+                'Abonar Cuenta',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
             ],
           ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.red.withOpacity(0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.withOpacity(0.3))),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red.withOpacity(0.3)),
+            ),
             child: Column(
               children: [
-                const Text('Falta por Cobrar', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Falta por Cobrar',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text('\$${_remainingUSD > 0 ? _remainingUSD.toStringAsFixed(2) : "0.00"}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                Text(
+                  '\$${_remainingUSD > 0 ? _remainingUSD.toStringAsFixed(2) : "0.00"}',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.redAccent,
+                  ),
+                ),
                 if (_remainingUSD > 0)
-                  Text('Bs. ${remainingVES.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                  Text(
+                    'Bs. ${remainingVES.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
               ],
             ),
           ),
           const SizedBox(height: 16),
           if (_newPayments.isNotEmpty) ...[
-            const Text('Abonos a procesar:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-            const SizedBox(height: 8),
-            ..._newPayments.map((p) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(PaymentMethods.label(p.method))),
-                  Text('\$${p.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      setState(() {
-                        _newPayments.remove(p);
-                        _remainingUSD += p.amount;
-                      });
-                    },
-                  ),
-                ],
+            const Text(
+              'Abonos a procesar:',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
               ),
-            )),
+            ),
+            const SizedBox(height: 8),
+            ..._newPayments.map(
+              (p) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(PaymentMethods.label(p.method))),
+                    Text(
+                      '\$${p.amount.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.redAccent,
+                        size: 20,
+                      ),
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () {
+                        setState(() {
+                          _newPayments.remove(p);
+                          _remainingUSD += p.amount;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const Divider(),
             const SizedBox(height: 8),
           ],
-          
-          if (_remainingUSD > 0.001) ...[ 
+
+          if (_remainingUSD > 0.001) ...[
             DropdownButtonFormField<String>(
               value: _selectedMethod,
               decoration: const InputDecoration(
                 labelText: 'Método de Pago',
                 border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               items: [
-                DropdownMenuItem(value: PaymentMethods.efectivoUsd, child: Text(PaymentMethods.label(PaymentMethods.efectivoUsd))),
-                DropdownMenuItem(value: PaymentMethods.pagoMovil, child: Text(PaymentMethods.label(PaymentMethods.pagoMovil))),
-                DropdownMenuItem(value: PaymentMethods.efectivoVes, child: Text(PaymentMethods.label(PaymentMethods.efectivoVes))),
-                DropdownMenuItem(value: PaymentMethods.puntoDeVenta, child: Text(PaymentMethods.label(PaymentMethods.puntoDeVenta))),
-                DropdownMenuItem(value: PaymentMethods.transferencia, child: Text(PaymentMethods.label(PaymentMethods.transferencia))),
+                DropdownMenuItem(
+                  value: PaymentMethods.efectivoUsd,
+                  child: Text(PaymentMethods.label(PaymentMethods.efectivoUsd)),
+                ),
+                DropdownMenuItem(
+                  value: PaymentMethods.pagoMovil,
+                  child: Text(PaymentMethods.label(PaymentMethods.pagoMovil)),
+                ),
+                DropdownMenuItem(
+                  value: PaymentMethods.efectivoVes,
+                  child: Text(PaymentMethods.label(PaymentMethods.efectivoVes)),
+                ),
+                DropdownMenuItem(
+                  value: PaymentMethods.puntoDeVenta,
+                  child: Text(
+                    PaymentMethods.label(PaymentMethods.puntoDeVenta),
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: PaymentMethods.transferencia,
+                  child: Text(
+                    PaymentMethods.label(PaymentMethods.transferencia),
+                  ),
+                ),
               ],
               onChanged: (val) {
                 if (val != null) {
@@ -492,11 +669,16 @@ class _MixedDebtPaymentDialogState extends ConsumerState<_MixedDebtPaymentDialog
                 Expanded(
                   child: TextField(
                     controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: InputDecoration(
                       labelText: isBolivares ? 'Monto (Bs)' : 'Monto (\$)',
                       border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                   ),
                 ),
@@ -509,21 +691,28 @@ class _MixedDebtPaymentDialogState extends ConsumerState<_MixedDebtPaymentDialog
                       CustomSnackBar.error(context, 'Monto inválido');
                       return;
                     }
-                    
+
                     double inputUSD = isBolivares ? input / widget.rate : input;
-                    
-                    if (inputUSD > _remainingUSD && (inputUSD - _remainingUSD) < 0.02) {
+
+                    if (inputUSD > _remainingUSD &&
+                        (inputUSD - _remainingUSD) < 0.02) {
                       inputUSD = _remainingUSD;
                     }
 
                     setState(() {
-                      _newPayments.add(Payment(method: _selectedMethod, amount: inputUSD));
+                      _newPayments.add(
+                        Payment(method: _selectedMethod, amount: inputUSD),
+                      );
                       _remainingUSD -= inputUSD;
                       if (_remainingUSD < 0) _remainingUSD = 0;
                       _amountController.clear();
                     });
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
                   child: const Text('AÑADIR'),
                 ),
               ],
@@ -532,10 +721,17 @@ class _MixedDebtPaymentDialogState extends ConsumerState<_MixedDebtPaymentDialog
               alignment: Alignment.centerRight,
               child: TextButton(
                 onPressed: () {
-                  _amountController.text = isBolivares ? remainingVES.toStringAsFixed(2) : _remainingUSD.toStringAsFixed(2);
+                  _amountController.text = isBolivares
+                      ? remainingVES.toStringAsFixed(2)
+                      : _remainingUSD.toStringAsFixed(2);
                 },
-                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                child: Text('Abonar Total Restante (${isBolivares ? 'Bs' : '\$'})'),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: Text(
+                  'Abonar Total Restante (${isBolivares ? 'Bs' : '\$'})',
+                ),
               ),
             ),
           ] else ...[
@@ -545,20 +741,36 @@ class _MixedDebtPaymentDialogState extends ConsumerState<_MixedDebtPaymentDialog
                 children: [
                   Icon(Icons.verified, color: Colors.green),
                   SizedBox(width: 8),
-                  Text('Deuda cubierta', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(
+                    'Deuda cubierta',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: _newPayments.isEmpty ? null : () => _confirmPayment(context, ref),
+            onPressed: _newPayments.isEmpty
+                ? null
+                : () => _confirmPayment(context, ref),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _remainingUSD <= 0.001 ? Colors.green : Colors.orange,
+              backgroundColor: _remainingUSD <= 0.001
+                  ? Colors.green
+                  : Colors.orange,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
-            child: Text(_remainingUSD <= 0.001 ? 'LIQUIDAR DEUDA' : 'CONFIRMAR ABONO PARCIAL', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            child: Text(
+              _remainingUSD <= 0.001
+                  ? 'LIQUIDAR DEUDA'
+                  : 'CONFIRMAR ABONO PARCIAL',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
           ),
         ],
       ),
@@ -566,22 +778,42 @@ class _MixedDebtPaymentDialogState extends ConsumerState<_MixedDebtPaymentDialog
   }
 
   void _confirmPayment(BuildContext context, WidgetRef ref) async {
-    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
     try {
-      final basePayments = widget.pending.pagosPrevios.where((p) => p.method != PaymentMethods.pendiente).toList();
+      final basePayments = widget.pending.pagosPrevios
+          .where((p) => p.method != PaymentMethods.pendiente)
+          .toList();
       List<Payment> finalPayments = [...basePayments, ..._newPayments];
-      
+
       if (_remainingUSD > 0.001) {
-        finalPayments.add(Payment(method: PaymentMethods.pendiente, amount: _remainingUSD));
+        finalPayments.add(
+          Payment(method: PaymentMethods.pendiente, amount: _remainingUSD),
+        );
       }
-      
-      await ref.read(pendingPaymentsProvider.notifier)
+
+      await ref
+          .read(pendingPaymentsProvider.notifier)
           .updatePendingStatus(widget.pending.idVenta, finalPayments);
-      
+
+      // ¡LA SOLUCIÓN DE REFRESCO!
+      // Obligamos a todas las pantallas a recargar la información nueva al instante
+      ref.invalidate(salesHistoryProvider);
+      ref.invalidate(reportsProvider);
+      ref.invalidate(pendingPaymentsProvider);
+
       if (context.mounted) {
         Navigator.pop(context); // close loading
         Navigator.pop(context); // close modal
-        CustomSnackBar.success(context, _remainingUSD <= 0.001 ? 'Deuda liquidada (Guardado Local/Nube)' : 'Abono procesado exitosamente.');
+        CustomSnackBar.success(
+          context,
+          _remainingUSD <= 0.001
+              ? 'Deuda liquidada'
+              : 'Abono procesado exitosamente.',
+        );
       }
     } catch (e) {
       if (context.mounted) {

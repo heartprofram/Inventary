@@ -1,6 +1,8 @@
 import 'package:googleapis/sheets/v4.dart' as sheets;
 
 class GoogleApiService {
+  bool get isInitialized => true;
+
   Future<void> init() async {
     print('MODO WEB: GoogleApiService inicializado (Sin conexión directa, se usará servidor Python)');
   }

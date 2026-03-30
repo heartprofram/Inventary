@@ -60,12 +60,13 @@ class ProductRepository {
   Future<void> updateStock(String productId, int newStock, {bool isSyncing = false}) async {
     try {
       if (kIsWeb) {
-        // Lógica de red simplificada para el ejemplo
-        await dio.put('$baseUrl/productos/stock', data: {'productId': productId, 'value': newStock});
+        await dio.put('$baseUrl/productos/stock', data: {'productId': productId, 'value': newStock})
+            .timeout(const Duration(seconds: 10));
       } else {
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
           AppConstants.spreadSheetId, 'Productos!A2:A',
-        );
+        ).timeout(const Duration(seconds: 10));
+        
         final rows = response.values ?? [];
         int index = rows.indexWhere((r) => r.isNotEmpty && r[0].toString() == productId);
         
@@ -75,18 +76,19 @@ class ProductRepository {
             AppConstants.spreadSheetId,
             'Productos!F${index + 2}',
             valueInputOption: 'USER_ENTERED',
-          );
+          ).timeout(const Duration(seconds: 10));
         }
       }
       await _updateLocalCacheStock(productId, newStock);
     } catch (e) {
-      if (!isSyncing) {
-        // SOLUCIÓN: Encolar mediante servicio
-        await localStorageService.addPendingInventoryUpdate(productId, newStock);
-        await _updateLocalCacheStock(productId, newStock);
-      } else {
-        rethrow;
-      }
+      if (isSyncing) rethrow;
+      debugPrint('[ProductRepo] Sin internet: Guardando actualización de stock localmente.');
+      await localStorageService.addPendingInventoryUpdate({
+        'type': 'stock',
+        'productId': productId,
+        'newStock': newStock,
+      });
+      await _updateLocalCacheStock(productId, newStock);
     }
   }
 
@@ -107,7 +109,7 @@ class ProductRepository {
     }
   }
   
-  Future<void> addProduct(Product product) async {
+  Future<void> addProduct(Product product, {bool isSyncing = false}) async {
     try {
       final row = [
         product.id,
@@ -120,21 +122,47 @@ class ProductRepository {
       ];
 
       if (kIsWeb) {
-        await dio.post('$baseUrl/productos', data: {'row': row});
+        await dio.post('$baseUrl/productos', data: {'row': row}).timeout(const Duration(seconds: 10));
       } else {
         await googleApi.sheetsApi.spreadsheets.values.append(
           sheets.ValueRange(values: [row]),
           AppConstants.spreadSheetId,
           'Productos!A:G',
           valueInputOption: 'USER_ENTERED',
-        );
+        ).timeout(const Duration(seconds: 10));
       }
+      await _addToLocalCache(product);
     } catch (e) {
-      throw Exception('Error al agregar producto: $e');
+      if (isSyncing) rethrow;
+      debugPrint('[ProductRepo] Sin internet: Encolando adición de producto.');
+      await localStorageService.addPendingInventoryUpdate({
+        'type': 'add',
+        'product': product.toJson(),
+      });
+      await _addToLocalCache(product);
     }
   }
+
+  Future<void> _addToLocalCache(Product product) async {
+    const String key = 'products_cache';
+    final List<dynamic> products = List<dynamic>.from(
+      await localStorageService.getCache('inventory_box', key, defaultValue: [])
+    );
+    
+    products.add([
+      product.id,
+      product.name,
+      product.description,
+      product.costPriceUSD,
+      product.salePriceUSD,
+      product.stockQuantity,
+      product.barCode,
+    ]);
+    
+    await localStorageService.saveCache('inventory_box', key, products);
+  }
   
-  Future<void> updateProduct(Product product) async {
+  Future<void> updateProduct(Product product, {bool isSyncing = false}) async {
     try {
       final rowData = [
         product.id, product.name, product.description,
@@ -143,7 +171,7 @@ class ProductRepository {
       ];
 
       if (kIsWeb) {
-        final productsResp = await dio.get('$baseUrl/productos');
+        final productsResp = await dio.get('$baseUrl/productos').timeout(const Duration(seconds: 10));
         final rows = productsResp.data as List<dynamic>;
         int rowIndex = -1;
         for (int i = 0; i < rows.length; i++) {
@@ -156,13 +184,13 @@ class ProductRepository {
             await dio.put('$baseUrl/productos/update', data: {
                 'range': 'Productos!A$rowIndex:G$rowIndex',
                 'row': rowData
-            });
+            }).timeout(const Duration(seconds: 10));
         }
       } else {
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
           AppConstants.spreadSheetId,
           'Productos!A2:A',
-        );
+        ).timeout(const Duration(seconds: 10));
         final rows = response.values ?? [];
         int rowIndex = -1;
         for (int i = 0; i < rows.length; i++) {
@@ -173,17 +201,48 @@ class ProductRepository {
         }
 
         if (rowIndex != -1) {
-          final valueRange = sheets.ValueRange(values: [rowData]);
           await googleApi.sheetsApi.spreadsheets.values.update(
-            valueRange,
+            sheets.ValueRange(values: [rowData]),
             AppConstants.spreadSheetId,
             'Productos!A$rowIndex:G$rowIndex',
             valueInputOption: 'USER_ENTERED',
-          );
+          ).timeout(const Duration(seconds: 10));
         }
       }
+      await _updateLocalCacheProduct(product);
     } catch (e) {
-      throw Exception('Error al actualizar producto: $e');
+      if (isSyncing) rethrow;
+      debugPrint('[ProductRepo] Sin internet: Encolando edición de producto.');
+      await localStorageService.addPendingInventoryUpdate({
+        'type': 'edit',
+        'product': product.toJson(),
+      });
+      await _updateLocalCacheProduct(product);
     }
   }
+
+  Future<void> _updateLocalCacheProduct(Product product) async {
+    const String key = 'products_cache';
+    final List<dynamic> products = List<dynamic>.from(
+      await localStorageService.getCache('inventory_box', key, defaultValue: [])
+    );
+    
+    for (int i = 0; i < products.length; i++) {
+      final row = List<dynamic>.from(products[i] as List);
+      if (row.isNotEmpty && row[0].toString() == product.id) {
+        products[i] = [
+          product.id,
+          product.name,
+          product.description,
+          product.costPriceUSD,
+          product.salePriceUSD,
+          product.stockQuantity,
+          product.barCode,
+        ];
+        await localStorageService.saveCache('inventory_box', key, products);
+        break;
+      }
+    }
+  }
+
 }

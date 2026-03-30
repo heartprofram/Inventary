@@ -4,6 +4,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/local_storage_service.dart';
 import '../../features/sales/data/sales_repository.dart';
 import '../../features/reports/data/movement_repository.dart';
+import '../../features/inventory/domain/product.dart';
+
 
 class SyncService {
   final LocalStorageService _localStorage;
@@ -67,20 +69,35 @@ class SyncService {
 
   Future<void> _syncInventory() async {
     final pending = await _localStorage.getPendingInventoryUpdates();
+    final repo = _salesRepo.productRepository;
+
     for (final update in pending) {
       try {
-        await _salesRepo.productRepository.updateStock(
-          update['productId'].toString(),
-          int.parse(update['newStock'].toString()),
-          isSyncing: true,
-        );
+        final type = update['type']?.toString();
+
+        if (type == 'stock' || type == null) {
+          // Retrocompatibilidad o actualización simple de stock
+          await repo.updateStock(
+            update['productId'].toString(),
+            int.parse(update['newStock'].toString()),
+            isSyncing: true,
+          );
+        } else if (type == 'add') {
+          final product = Product.fromJson(Map<String, dynamic>.from(update['product']));
+          await repo.addProduct(product, isSyncing: true);
+        } else if (type == 'edit') {
+          final product = Product.fromJson(Map<String, dynamic>.from(update['product']));
+          await repo.updateProduct(product, isSyncing: true);
+        }
+
         await _localStorage.removePendingInventoryUpdate(update['queue_key']);
       } catch (e) {
-        debugPrint('Fallo silencioso en Inventario: $e');
-        break; // SOLUCIÓN: Usamos break en lugar de throw para no congelar la app
+        debugPrint('Fallo silencioso en sincronización de Inventario ($update): $e');
+        break; 
       }
     }
   }
+
 
   Future<void> _syncSales() async {
     final pending = await _localStorage.getPendingSales();

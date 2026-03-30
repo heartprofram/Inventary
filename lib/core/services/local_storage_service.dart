@@ -68,10 +68,11 @@ class LocalStorageService {
     }).toList();
   }
 
-  Future<void> addPendingInventoryUpdate(String productId, int newStock) async {
+  Future<void> addPendingInventoryUpdate(dynamic update) async {
     final box = await _getBox(_inventoryQueue);
-    await box.add({'productId': productId, 'newStock': newStock});
+    await box.add(update);
   }
+
 
   Future<void> removePendingInventoryUpdate(dynamic key) async {
     final box = await _getBox(_inventoryQueue);

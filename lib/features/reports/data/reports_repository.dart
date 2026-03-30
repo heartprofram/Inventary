@@ -19,19 +19,22 @@ class ReportsRepository {
     required this.localStorageService,
   });
 
-  // SOLUCIÓN: Ahora recibe un DateTime por parámetro
+
   Future<List<Sale>> getDailySales(DateTime date) async {
     final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     final String cacheKey = 'daily_sales_$dateStr';
 
     List<dynamic> rows = [];
+    List<Sale> networkSales = [];
 
     try {
-      // 1. INTENTO DE RED (Network-First)
       if (kIsWeb) {
         final response = await dio.get('$baseUrl/ventas').timeout(const Duration(seconds: 5));
         rows = response.data ?? [];
       } else {
+        // SOLUCIÓN 1: Iniciar sesión en Google API antes de consultar
+        if (!googleApi.isInitialized) await googleApi.init();
+        
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
           AppConstants.spreadSheetId,
           'Ventas!A2:H',
@@ -39,25 +42,18 @@ class ReportsRepository {
         rows = response.values ?? [];
       }
       
-      // 2. ACTUALIZAR CACHÉ TRAS ÉXITO
       if (rows.isNotEmpty) {
         await localStorageService.saveCache('sales_cache', cacheKey, rows);
       }
     } catch (e) {
       debugPrint('[ReportsRepo] Fallo de red, rescatando caché financiero: $e');
-      
-      // 3. FALLBACK A CACHÉ (SOLUCIÓN CACHÉ FINANCIERO)
       rows = await localStorageService.getCache('sales_cache', cacheKey, defaultValue: []) as List<dynamic>;
     }
 
-    // 4. MAPEO DE DATOS
     try {
-      final List<Sale> sales = [];
       for (var row in rows) {
         if (row.length >= 5 && row[1].toString().startsWith(dateStr)) {
           final totalUSD = double.tryParse(row[2].toString().replaceAll(',', '.')) ?? 0.0;
-          
-          // Mapeo robusto de pagos
           List<Payment> payments = [];
           if (row.length >= 7 && row[6].toString().isNotEmpty) {
              try {
@@ -82,13 +78,74 @@ class ReportsRepository {
             payments: payments,
           )..overrideTotals(totalUSD, double.tryParse(row[3].toString().replaceAll(',', '.')) ?? 0.0);
           
-          sales.add(s);
+          networkSales.add(s);
         }
       }
-      return sales;
     } catch (e) {
-      debugPrint('[ReportsRepo] Error procesando datos: $e');
-      return []; // SOLUCIÓN: Nunca lanzar excepción que rompa la UI
+      debugPrint('[ReportsRepo] Error procesando datos de red: $e');
     }
+
+    // SOLUCIÓN 2: AÑADIR LAS VENTAS HECHAS OFFLINE AL CIERRE DE CAJA
+    List<Sale> pendingSales = [];
+    try {
+      final pendingJsons = await localStorageService.getPendingSales();
+      for (var json in pendingJsons) {
+        final saleDate = DateTime.tryParse(json['fecha']?.toString() ?? '') ?? DateTime.now();
+        // Solo mostrar en el cierre si la venta es de "Hoy"
+        if (saleDate.year == date.year && saleDate.month == date.month && saleDate.day == date.day) {
+          final payments = (json['metodos_pago'] as List? ?? []).map((p) => Payment(
+            method: p['method']?.toString() ?? 'Desconocido',
+            amount: (p['amount'] as num).toDouble(),
+          )).toList();
+          
+          final totalUsd = double.tryParse(json['total_usd'].toString()) ?? 0.0;
+          final totalVes = double.tryParse(json['total_ves'].toString()) ?? 0.0;
+
+          final s = Sale(
+            id: json['id_venta']?.toString() ?? '',
+            date: saleDate,
+            exchangeRate: double.tryParse(json['tasa_cambio'].toString()) ?? 1.0,
+            details: [],
+            payments: payments,
+            debtorName: json['detalles_nombre']?.toString() == ' ' ? null : json['detalles_nombre']?.toString(),
+          )..overrideTotals(totalUsd, totalVes);
+
+          pendingSales.add(s);
+        }
+      }
+    } catch (e) {
+      debugPrint('[ReportsRepo] Error procesando ventas offline: $e');
+    }
+
+    final allSales = [...pendingSales, ...networkSales];
+
+    // SOLUCIÓN 3: APLICAR LOS ABONOS (DEUDAS LIQUIDADAS) AL CIERRE DE CAJA
+    try {
+      final pendingPayments = await localStorageService.getPendingPaymentUpdates();
+      for (final update in pendingPayments) {
+        final saleId = update['id_venta'].toString();
+        final saleIndex = allSales.indexWhere((s) => s.id == saleId);
+        
+        if (saleIndex != -1) {
+          final rawPayments = update['metodos_pago'] as List;
+          final mappedPayments = rawPayments.map((p) => Payment(
+            method: p['method']?.toString() ?? 'Desconocido',
+            amount: (p['amount'] as num).toDouble(),
+          )).toList();
+          
+          final old = allSales[saleIndex];
+          allSales[saleIndex] = Sale(
+            id: old.id,
+            date: old.date,
+            exchangeRate: old.exchangeRate,
+            details: old.details,
+            payments: mappedPayments,
+            debtorName: old.debtorName,
+          )..overrideTotals(old.totalUSD, old.totalVES);
+        }
+      }
+    } catch (e) {}
+
+    return allSales;
   }
 }

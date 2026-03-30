@@ -21,7 +21,27 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   return service;
 });
 
-final pendingSyncCountProvider = FutureProvider<int>((ref) async {
-  final localStorage = ref.watch(localStorageServiceProvider);
-  return localStorage.getPendingCount();
+final pendingSyncCountProvider = StreamProvider<int>((ref) async* {
+  final local = ref.read(localStorageServiceProvider);
+  int lastCount = -1;
+  
+  while (true) {
+    int currentCount = 0;
+    try {
+      final sales = await local.getPendingSales();
+      final inv = await local.getPendingInventoryUpdates();
+      final mov = await local.getPendingMovements();
+      final pay = await local.getPendingPaymentUpdates();
+      currentCount = sales.length + inv.length + mov.length + pay.length;
+    } catch (_) {}
+
+    // Solo actualiza la interfaz si el número cambió
+    if (currentCount != lastCount) {
+      lastCount = currentCount;
+      yield currentCount;
+    }
+    // Revisa silenciosamente cada 2 segundos
+    await Future.delayed(const Duration(seconds: 2));
+  }
 });
+

@@ -261,13 +261,14 @@ class SalesRepository {
 
       try {
         if (kIsWeb) {
-          // AÑADIDO: Timeout de 5 segundos a las lecturas
           final ventasResp = await dio.get('$baseUrl/ventas', queryParameters: {'days': days}).timeout(const Duration(seconds: 5));
           final detallesResp = await dio.get('$baseUrl/detalle_ventas').timeout(const Duration(seconds: 5));
           ventasRows = ventasResp.data ?? [];
           detallesRows = detallesResp.data ?? [];
         } else {
-          // AÑADIDO: Timeout de 5 segundos a las lecturas de Google Sheets
+          // SOLUCIÓN 1: Iniciar sesión en Google API antes de leer para que funcione CON internet
+          if (!googleApi.isInitialized) await googleApi.init();
+          
           final vResp = await googleApi.sheetsApi.spreadsheets.values.get(
             AppConstants.spreadSheetId,
             'Ventas!A2:H',
@@ -293,13 +294,11 @@ class SalesRepository {
           }
         }
 
-        // GUARDADO EN CACHE SI HAY INTERNET
         if (ventasRows.isNotEmpty) {
           await localStorageService.saveCache('sales_cache', 'ventas_cache', ventasRows);
           await localStorageService.saveCache('sales_cache', 'detalles_cache', detallesRows);
         }
       } catch (networkError) {
-        // LA MAGIA: Si no hay internet o tarda más de 5 seg, carga la memoria interna
         debugPrint('[SalesRepo] Error de red en lectura, cargando de cache local');
         ventasRows = await localStorageService.getCache('sales_cache', 'ventas_cache', defaultValue: []);
         detallesRows = await localStorageService.getCache('sales_cache', 'detalles_cache', defaultValue: []);
@@ -369,7 +368,7 @@ class SalesRepository {
       debugPrint('[SalesRepo] Error crítico procesando historial: $e');
     }
 
-    // AÑADE LAS DEUDAS Y VENTAS OFFLINE AL HISTORIAL VISUAL DE INMEDIATO
+    // AÑADIR VENTAS OFFLINE 
     List<Sale> pendingSales = [];
     try {
       final localJsons = await localStorageService.getPendingSales();
@@ -379,6 +378,37 @@ class SalesRepository {
     }
 
     final allSales = [...pendingSales, ...networkSales];
+
+    // SOLUCIÓN 3: APLICAR LOS ABONOS OFFLINE A LA LISTA PARA QUE REFLEJE AL INSTANTE
+    try {
+      final pendingPayments = await localStorageService.getPendingPaymentUpdates();
+      for (final update in pendingPayments) {
+        final saleId = update['id_venta'].toString();
+        final saleIndex = allSales.indexWhere((s) => s.id == saleId);
+        
+        if (saleIndex != -1) {
+          final rawPayments = update['metodos_pago'] as List;
+          final mappedPayments = rawPayments.map((p) => Payment(
+            method: p['method']?.toString() ?? 'Desconocido',
+            amount: (p['amount'] as num).toDouble(),
+          )).toList();
+          
+          final old = allSales[saleIndex];
+          // Parcheamos la venta vieja con los pagos nuevos
+          allSales[saleIndex] = Sale(
+            id: old.id,
+            date: old.date,
+            exchangeRate: old.exchangeRate,
+            details: old.details,
+            payments: mappedPayments,
+            debtorName: old.debtorName,
+          )..overrideTotals(old.totalUSD, old.totalVES);
+        }
+      }
+    } catch (e) {
+      debugPrint('[SalesRepo] Error aplicando abonos offline: $e');
+    }
+
     allSales.sort((a, b) => b.date.compareTo(a.date));
     return allSales;
   }
@@ -393,11 +423,12 @@ class SalesRepository {
   }
 
   Future<void> updateSaleStatus(String idVenta, List<Payment> payments, {bool isSyncing = false}) async {
+    final paymentsJsonList = payments.map((p) => p.toJson()).toList();
     try {
       if (kIsWeb) {
         await dio.put('$baseUrl/ventas/update_status', data: {
           'id_venta': idVenta,
-          'metodos_pago': payments.map((p) => p.toJson()).toList(),
+          'metodos_pago': paymentsJsonList,
         }).timeout(const Duration(seconds: 15));
       } else {
         final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A').timeout(const Duration(seconds: 15));
@@ -410,21 +441,26 @@ class SalesRepository {
           }
         }
         if (rowIndex != -1) {
-          final paymentsJson = jsonEncode(payments.map((p) => p.toJson()).toList());
+          final paymentsJsonStr = jsonEncode(paymentsJsonList);
           await googleApi.sheetsApi.spreadsheets.values.update(
-            sheets.ValueRange(values: [[paymentsJson]]),
+            sheets.ValueRange(values: [[paymentsJsonStr]]),
             AppConstants.spreadSheetId,
             'Ventas!G$rowIndex',
             valueInputOption: 'USER_ENTERED',
           ).timeout(const Duration(seconds: 15));
+        } else {
+          // SOLUCIÓN: La venta no está en Sheets (es una venta offline que no ha subido).
+          // Por lo tanto, guardamos el abono localmente para subirlo junto con la venta después.
+          await localStorageService.addPendingPaymentUpdate(idVenta, paymentsJsonList);
         }
       }
     } catch (e) {
       if (isSyncing) rethrow; 
       debugPrint('[SalesRepo] Sin internet: Guardando abono localmente para sincronizar luego.');
-      await localStorageService.addPendingPaymentUpdate(idVenta, payments.map((p) => p.toJson()).toList());
+      await localStorageService.addPendingPaymentUpdate(idVenta, paymentsJsonList);
     }
   }
+
 
   Future<void> resyncPaymentUpdate(Map<String, dynamic> updateJson) async {
     final idVenta = updateJson['id_venta'];
