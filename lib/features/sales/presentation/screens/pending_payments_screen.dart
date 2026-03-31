@@ -800,10 +800,10 @@ class _MixedDebtPaymentDialogState
           .read(pendingPaymentsProvider.notifier)
           .updatePendingStatus(widget.pending.idVenta, finalPayments);
 
-      // ARREGLO PUNTOS 5 Y 6: Obligar a las pantallas a recargar inmediatamente
-      ref.invalidate(reportsProvider);
-      ref.invalidate(salesHistoryProvider);
-      ref.invalidate(pendingPaymentsProvider);
+      // ✅ PROBLEMA 3: Invalidar providers para reflejar cambios inmediatamente
+      ref.invalidate(salesHistoryProvider);     // Historial de ventas
+      ref.invalidate(reportsProvider);          // Cierre de caja
+      ref.invalidate(pendingPaymentsProvider);  // Pagos pendientes
 
       if (context.mounted) {
         Navigator.pop(context); // close loading

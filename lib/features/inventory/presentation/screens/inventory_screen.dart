@@ -217,103 +217,136 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-  void _showSurtirDialog(BuildContext context, WidgetRef ref, Product product) {
-    final quantityController = TextEditingController(text: '0');
-    final costController = TextEditingController(text: product.costPriceUSD.toString());
-    final priceController = TextEditingController(text: product.salePriceUSD.toString());
+void _showSurtirDialog(BuildContext context, WidgetRef ref, Product product) {
+  final quantityController = TextEditingController();
+  final costController = TextEditingController(text: product.costPriceUSD.toStringAsFixed(2));
+  final saleController = TextEditingController(text: product.salePriceUSD.toStringAsFixed(2));
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Surtir: ${product.name}', style: const TextStyle(fontSize: 18)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Stock actual: ${product.stockQuantity}', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: quantityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Unidades a ingresar', border: OutlineInputBorder()),
+  showDialog(
+    context: context,
+    builder: (BuildContext dialogContext) => AlertDialog(
+      title: Text('Surtir: ${product.name}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Stock actual: ${product.stockQuantity}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: quantityController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Unidades a ingresar',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.add_box_outlined),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: costController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Precio de Compra (USD)', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: costController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Precio de Compra (USD)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.trending_down),
+                prefixText: '\$ ',
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: priceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Precio de Venta (USD)', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: saleController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Precio de Venta (USD)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.trending_up),
+                prefixText: '\$ ',
               ),
-            ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () async {
+            final qtyStr = quantityController.text.trim();
+            final costStr = costController.text.trim();
+            final saleStr = saleController.text.trim();
+
+            final qty = int.tryParse(qtyStr) ?? 0;
+            final cost = double.tryParse(costStr.replaceAll(',', '.')) ?? product.costPriceUSD;
+            final sale = double.tryParse(saleStr.replaceAll(',', '.')) ?? product.salePriceUSD;
+
+            if (qty <= 0) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Ingresa unidades válidas')),
+              );
+              return;
+            }
+
+            Navigator.of(dialogContext).pop();
+
+            final updatedProduct = Product(
+              id: product.id,
+              name: product.name,
+              description: product.description,
+              costPriceUSD: cost,
+              salePriceUSD: sale,
+              stockQuantity: product.stockQuantity + qty,
+              barCode: product.barCode,
+            );
+
+            await ref.read(productRepositoryProvider).updateProduct(updatedProduct);
+
+            final totalCost = qty * cost;
+            try {
+              final movement = Movement(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                date: DateTime.now(),
+                type: 'Egreso',
+                amountUSD: totalCost,
+                amountVES: totalCost * (ref.read(exchangeRateProvider).value?.rate ?? 36.0),
+                description: 'Surtido ${product.name}: +${qty}und @\$${cost.toStringAsFixed(2)}',
+              );
+              await ref.read(movementRepositoryProvider).addMovement(movement);
+            } catch (e) {
+              // Silencioso offline
+            }
+
+            ref.invalidate(inventoryProvider);
+
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Surtido ${qty}und de ${product.name} ✅'),
+                  backgroundColor: Colors.teal,
+                ),
+              );
+            }
+          },
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('Confirmar'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal,
+            foregroundColor: Colors.white,
           ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-            onPressed: () async {
-              final qty = int.tryParse(quantityController.text) ?? 0;
-              final cost = double.tryParse(costController.text.replaceAll(',', '.')) ?? product.costPriceUSD;
-              final price = double.tryParse(priceController.text.replaceAll(',', '.')) ?? product.salePriceUSD;
-
-              if (qty > 0) {
-                Navigator.pop(context);
-                
-                // 1. Actualizar todo el producto con los nuevos precios y stock
-                final updatedProduct = Product(
-                  id: product.id,
-                  name: product.name,
-                  description: product.description,
-                  costPriceUSD: cost,
-                  salePriceUSD: price,
-                  stockQuantity: product.stockQuantity + qty,
-                  barCode: product.barCode,
-                );
-                
-                await ref.read(productRepositoryProvider).updateProduct(updatedProduct);
-
-                // 2. Registrar el gasto en el apartado de Movimientos (Egreso)
-                final rate = ref.read(exchangeRateProvider).value?.rate ?? 36.0;
-                final totalCostUSD = cost * qty;
-                final totalCostVES = totalCostUSD * rate;
-
-                final mov = Movement(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  date: DateTime.now(),
-                  type: 'Egreso',
-                  amountUSD: totalCostUSD,
-                  amountVES: totalCostVES,
-                  description: 'Surtido de inventario: ${product.name} (+$qty unds)',
-                );
-                
-                try {
-                  await ref.read(movementRepositoryProvider).addMovement(mov);
-                } catch(e) {
-                  debugPrint('Movimiento encolado offline');
-                }
-
-                // 3. Recargar las pantallas
-                ref.invalidate(inventoryProvider);
-                
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Stock surtido y egreso registrado con éxito'), backgroundColor: Colors.teal,
-                  ));
-                }
-              }
-            },
-            child: const Text('Confirmar Surtido'),
-          ),
-        ],
-      ),
-    );
-  }
+      ],
+    ),
+  ).then((_) {
+    quantityController.dispose();
+    costController.dispose();
+    saleController.dispose();
+  });
+}
 
   void _navigateToAdd(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => const AddProductScreen()));
