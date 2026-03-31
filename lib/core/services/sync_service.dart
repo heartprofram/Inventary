@@ -88,6 +88,8 @@ class SyncService {
         } else if (type == 'edit') {
           final product = Product.fromJson(Map<String, dynamic>.from(update['product']));
           await repo.updateProduct(product, isSyncing: true);
+        } else if (type == 'delete') {
+          await repo.deleteProduct(update['productId'].toString(), isSyncing: true);
         }
 
         await _localStorage.removePendingInventoryUpdate(update['queue_key']);

@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 import '../../../sales/domain/sale.dart';
-import '../../../sales/domain/entities/payment.dart'; // <-- IMPORTACIÓN FALTANTE AGREGADA
 import '../../../../core/utils/pdf_invoice_generator.dart';
 import '../../../../core/providers/core_providers.dart';
 

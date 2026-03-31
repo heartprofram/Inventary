@@ -176,15 +176,15 @@ class ProductRepository {
         int rowIndex = -1;
         for (int i = 0; i < rows.length; i++) {
           if (rows[i].isNotEmpty && rows[i][0].toString() == product.id) {
-              rowIndex = i + 2; 
-              break;
+            rowIndex = i + 2;
+            break;
           }
         }
         if (rowIndex != -1) {
-            await dio.put('$baseUrl/productos/update', data: {
-                'range': 'Productos!A$rowIndex:G$rowIndex',
-                'row': rowData
-            }).timeout(const Duration(seconds: 10));
+          await dio.put('$baseUrl/productos/update', data: {
+            'range': 'Productos!A$rowIndex:G$rowIndex',
+            'row': rowData
+          }).timeout(const Duration(seconds: 10));
         }
       } else {
         final response = await googleApi.sheetsApi.spreadsheets.values.get(
@@ -201,41 +201,59 @@ class ProductRepository {
         }
 
         if (rowIndex != -1) {
+          final valueRange = sheets.ValueRange(values: [rowData]);
           await googleApi.sheetsApi.spreadsheets.values.update(
-            sheets.ValueRange(values: [rowData]),
+            valueRange,
             AppConstants.spreadSheetId,
             'Productos!A$rowIndex:G$rowIndex',
             valueInputOption: 'USER_ENTERED',
           ).timeout(const Duration(seconds: 10));
         }
       }
+      
+      // Éxito: Actualizamos la caché local
       await _updateLocalCacheProduct(product);
+      
     } catch (e) {
       if (isSyncing) rethrow;
-      // PUNTO 2: MODO OFFLINE AL EDITAR
+      debugPrint('[ProductRepo] Sin internet: Encolando edición de producto.');
+      
+      // ✅ 1. Actualiza caché local para que la UI cambie de inmediato
       await _updateLocalCacheProduct(product);
-      debugPrint('Editado offline. Los cambios subirán luego.');
+      
+      // ✅ 2. Creamos el mapa manualmente porque product.toJson() NO existe
+      final productMap = {
+        'id': product.id,
+        'name': product.name,
+        'description': product.description,
+        'costPriceUSD': product.costPriceUSD,
+        'salePriceUSD': product.salePriceUSD,
+        'stockQuantity': product.stockQuantity,
+        'barCode': product.barCode,
+      };
+
       await localStorageService.addPendingInventoryUpdate({
         'type': 'edit',
-        'product': product.toJson(),
+        'product': productMap,
+        'timestamp': DateTime.now().toIso8601String(),
       });
     }
   }
 
-  // PUNTO 3: ELIMINAR PRODUCTO
-  Future<void> deleteProduct(String productId) async {
+  // NUEVO MÉTODO: Eliminar Producto
+  Future<void> deleteProduct(String productId, {bool isSyncing = false}) async {
     try {
-      if (kIsWeb) {
-        // En web, delegamos al backend si existe el endpoint, si no, solo local.
-        // Simulamos éxito para limpiar cache local al menos.
-      } else {
+      if (!kIsWeb) {
         final meta = await googleApi.sheetsApi.spreadsheets.get(AppConstants.spreadSheetId).timeout(const Duration(seconds: 10));
         final sheetProd = meta.sheets?.firstWhere((s) => s.properties?.title == 'Productos');
-        final resp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Productos!A:A').timeout(const Duration(seconds: 10));
-        final rows = resp.values ?? [];
         
+        final resp = await googleApi.sheetsApi.spreadsheets.values.get(
+          AppConstants.spreadSheetId, 'Productos!A:A'
+        ).timeout(const Duration(seconds: 10));
+        
+        final rows = resp.values ?? [];
         for (int i = rows.length - 1; i >= 0; i--) {
-          if (rows[i].isNotEmpty && rows[i][0].toString() == productId) {
+          if (rows[i].isNotEmpty && rows[i][0] == productId) {
             await googleApi.sheetsApi.spreadsheets.batchUpdate(
               sheets.BatchUpdateSpreadsheetRequest(requests: [
                 sheets.Request(deleteDimension: sheets.DeleteDimensionRequest(
@@ -246,8 +264,7 @@ class ProductRepository {
                     endIndex: i + 1
                   )
                 ))
-              ]), 
-              AppConstants.spreadSheetId
+              ]), AppConstants.spreadSheetId
             ).timeout(const Duration(seconds: 10));
             break;
           }
@@ -255,17 +272,21 @@ class ProductRepository {
       }
       await _removeLocalCacheProduct(productId);
     } catch (e) {
+      if (isSyncing) rethrow;
+      debugPrint('[ProductRepo] Modo Offline: Eliminando producto del caché local.');
       await _removeLocalCacheProduct(productId);
-      debugPrint('Error al eliminar (se quitó de cache local): $e');
+      
+      await localStorageService.addPendingInventoryUpdate({
+        'type': 'delete',
+        'productId': productId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
     }
   }
 
   Future<void> _updateLocalCacheProduct(Product product) async {
     const String key = 'products_cache';
-    final List<dynamic> products = List<dynamic>.from(
-      await localStorageService.getCache('inventory_box', key, defaultValue: [])
-    );
-    
+    final products = await localStorageService.getCache('inventory_box', key, defaultValue: []) as List<dynamic>;
     for (int i = 0; i < products.length; i++) {
       final row = List<dynamic>.from(products[i] as List);
       if (row.isNotEmpty && row[0].toString() == product.id) {

@@ -81,6 +81,44 @@ class ReportsScreen extends ConsumerWidget {
                     ),
                   );
                 }),
+                const SizedBox(height: 32),
+                _buildSectionHeader('Detalle de Artículos Vendidos', 'Productos despachados hoy'),
+                const SizedBox(height: 16),
+                if (metrics.sales.every((s) => s.details.isEmpty))
+                  const Text('No se encontraron detalles de artículos para hoy.', style: TextStyle(color: Colors.grey)),
+                ...metrics.sales.expand((sale) {
+                  if (sale.details.isEmpty) return <Widget>[]; 
+                  return [
+                    Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.grey[200]!),
+                      ),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ExpansionTile(
+                        leading: const Icon(Icons.receipt_long, color: Colors.blue),
+                        title: Text(
+                          'Factura #${sale.id.substring(0, 8)}...',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          '${sale.details.length} artículos | Total: \$${sale.totalUSD.toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        children: sale.details.map((detail) => ListTile(
+                          dense: true,
+                          title: Text(detail.productName, style: const TextStyle(fontSize: 14)),
+                          trailing: Text(
+                            'x${detail.quantity}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal),
+                          ),
+                          subtitle: Text('\$${(detail.unitPriceUSD * detail.quantity).toStringAsFixed(2)}'),
+                        )).toList(),
+                      ),
+                    ),
+                  ];
+                }).toList(),
                 const SizedBox(height: 40),
                 if (metrics.isClosed) ...[
                   Container(

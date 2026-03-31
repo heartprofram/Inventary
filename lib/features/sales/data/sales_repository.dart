@@ -45,10 +45,6 @@ class SalesRepository {
         d.subtotalUSD
       ]).toList();
 
-      // ARREGLO PUNTO 8: Descontar stock PRIMERO. 
-      // Así la memoria local se actualiza al instante, haya o no internet.
-      await _deductStock(sale.details);
-
       await _sendSaleToNetwork(sale, ventaRow, detallesRows);
     } catch (e) {
       throw Exception('Error al procesar la venta: $e');
@@ -76,6 +72,13 @@ class SalesRepository {
     List<dynamic> ventaRow,
     List<List<dynamic>> detallesRows,
   ) async {
+    // ✅ PRIMERO: Descuenta stock localmente (caché se actualiza al instante)
+    try {
+      await _deductStock(sale.details);
+    } catch (stockError) {
+      debugPrint('[SalesRepo] Error al actualizar stock local: $stockError');
+    }
+
     try {
       if (kIsWeb) {
         final ventaData = {
@@ -115,9 +118,10 @@ class SalesRepository {
           valueInputOption: 'USER_ENTERED',
         ).timeout(const Duration(seconds: 10)); 
       }
-
+      // ✅ Si la red funciona, ya se descontó el stock arriba
     } catch (networkError) {
       debugPrint('[SalesRepo] Modo Offline activado: Guardando venta localmente');
+      // ✅ La venta se encola, pero el stock YA fue descontado localmente
       await localStorageService.addPendingSale(_saleToJson(sale));
     }
   }
@@ -419,6 +423,25 @@ class SalesRepository {
 
   Future<void> updateSaleStatus(String idVenta, List<Payment> payments, {bool isSyncing = false}) async {
     final paymentsJsonList = payments.map((p) => p.toJson()).toList();
+    
+    // ✅ SOLUCIÓN PUNTO 3: Actualizar el caché local DE INMEDIATO (Online u Offline)
+    try {
+      final key = 'ventas_cache';
+      final sales = await localStorageService.getCache('sales_cache', key, defaultValue: []) as List;
+      for (var row in sales) {
+        if (row.isNotEmpty && row[0].toString() == idVenta) {
+          if (row.length > 6) {
+            row[6] = jsonEncode(paymentsJsonList);
+          }
+          break;
+        }
+      }
+      await localStorageService.saveCache('sales_cache', key, sales);
+    } catch (_) {
+      debugPrint('[SalesRepo] Error actualizando caché de pagos (no crítico)');
+    }
+
+    // Lógica de subida a la red
     try {
       if (kIsWeb) {
         await dio.put('$baseUrl/ventas/update_status', data: {
@@ -426,12 +449,14 @@ class SalesRepository {
           'metodos_pago': paymentsJsonList,
         }).timeout(const Duration(seconds: 15));
       } else {
-        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(AppConstants.spreadSheetId, 'Ventas!A:A').timeout(const Duration(seconds: 15));
+        final vResp = await googleApi.sheetsApi.spreadsheets.values.get(
+          AppConstants.spreadSheetId, 'Ventas!A:A'
+        ).timeout(const Duration(seconds: 15));
         final vRows = vResp.values ?? [];
         int rowIndex = -1;
         for (int i = 0; i < vRows.length; i++) {
           if (vRows[i].isNotEmpty && vRows[i][0].toString() == idVenta) {
-            rowIndex = i + 1;
+            rowIndex = i + 1; 
             break;
           }
         }
@@ -444,14 +469,13 @@ class SalesRepository {
             valueInputOption: 'USER_ENTERED',
           ).timeout(const Duration(seconds: 15));
         } else {
-          // SOLUCIÓN: La venta no está en Sheets (es una venta offline que no ha subido).
-          // Por lo tanto, guardamos el abono localmente para subirlo junto con la venta después.
+          // La venta no está en Sheets (es offline), guardar abono localmente
           await localStorageService.addPendingPaymentUpdate(idVenta, paymentsJsonList);
         }
       }
     } catch (e) {
       if (isSyncing) rethrow; 
-      debugPrint('[SalesRepo] Sin internet: Guardando abono localmente para sincronizar luego.');
+      debugPrint('[SalesRepo] Sin internet: Guardando abono localmente.');
       await localStorageService.addPendingPaymentUpdate(idVenta, paymentsJsonList);
     }
   }

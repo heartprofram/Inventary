@@ -94,8 +94,7 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Editar Producto'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
+        // ✅ Sin colores fijos - usa el tema del sistema
       ),
       body: _isLoading
         ? const Center(child: CircularProgressIndicator())
@@ -182,19 +181,19 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
                       onPressed: _updateProduct,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
+                  // 🔴 BOTÓN ELIMINAR PRODUCTO
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.delete_outline, color: Colors.white),
-                      label: const Text('Eliminar Producto', style: TextStyle(fontSize: 16)),
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      label: const Text('Eliminar Producto', style: TextStyle(fontSize: 16, color: Colors.red)),
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        foregroundColor: Colors.white,
-                        side: BorderSide.none,
+                        side: const BorderSide(color: Colors.red),
+                        backgroundColor: Colors.red.withOpacity(0.05),
                       ),
-                      onPressed: () => _confirmDelete(context),
+                      onPressed: () => _confirmDelete(context, ref),
                     ),
                   ),
                 ],
@@ -204,36 +203,64 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
     );
   }
 
-  void _confirmDelete(BuildContext context) {
-    showDialog(
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('¿Eliminar Producto?'),
-        content: const Text('Esta acción quitará el producto del catálogo y no se puede deshacer.'),
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 12),
+            Text('Eliminar Producto'),
+          ],
+        ),
+        content: const Text(
+          '¿Estás seguro de que deseas eliminar este producto? Esta acción no se puede deshacer.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              setState(() => _isLoading = true);
-              try {
-                await ref.read(productRepositoryProvider).deleteProduct(widget.product.id);
-                ref.invalidate(inventoryProvider);
-                if (mounted) {
-                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Producto eliminado')));
-                   Navigator.pop(context);
-                }
-              } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-              } finally {
-                if (mounted) setState(() => _isLoading = false);
-              }
-            },
-            child: const Text('Eliminar definitivamente', style: TextStyle(color: Colors.white)),
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Eliminar'),
           ),
         ],
       ),
     );
+
+    if (confirmed == true && mounted) {
+      setState(() => _isLoading = true);
+      try {
+        // Llama al repositorio para eliminar
+        await ref.read(productRepositoryProvider).deleteProduct(widget.product.id);
+        
+        // Invalida el provider para refrescar la lista
+        ref.invalidate(inventoryProvider);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Producto eliminado', style: TextStyle(color: Colors.white)),
+              backgroundColor: Colors.red,
+            ),
+          );
+          Navigator.pop(context); // Regresa al inventario
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e', style: const TextStyle(color: Colors.white)),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
   }
 }
