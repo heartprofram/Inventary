@@ -53,6 +53,7 @@ class SyncService {
 
     try {
       await _syncInventory();
+      await _syncProductEdits();
       await _syncSales();
       await _syncMovements();
       await _syncPayments();
@@ -136,6 +137,29 @@ class SyncService {
       } catch (e) {
         debugPrint('Fallo silencioso en Abonos: $e');
         break;
+      }
+    }
+  }
+
+  Future<void> _syncProductEdits() async {
+    final pending = await _localStorage.getPendingProductEdits();
+    for (final update in List.from(pending)) {
+      try {
+        final product = Product(
+          id: update['id']?.toString() ?? '',
+          name: update['name']?.toString() ?? '',
+          description: update['description']?.toString() ?? '',
+          costPriceUSD: (update['costPriceUSD'] as num?)?.toDouble() ?? 0.0,
+          salePriceUSD: (update['salePriceUSD'] as num?)?.toDouble() ?? 0.0,
+          stockQuantity: (update['stockQuantity'] as num?)?.toInt() ?? 0,
+          barCode: update['barCode']?.toString() ?? '',
+        );
+        
+        await _salesRepo.productRepository.updateProduct(product, isSyncing: true);
+        await _localStorage.removePendingProductEdit(product.id);
+      } catch (e) {
+        debugPrint('Fallo silencioso subiendo edición de producto: $e');
+        break; 
       }
     }
   }

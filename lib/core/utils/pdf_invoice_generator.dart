@@ -589,455 +589,188 @@ class PdfInvoiceGenerator {
 
   static Future<Uint8List> generateZReport(List<Sale> sales, double totalUSD, double totalVES) async {
     final pdf = pw.Document();
-  
-    // ✅ Contadores para métodos de pago (cada método aparece UNA sola vez)
-    double efectivoUSD = 0.0;
-    double efectivoBS = 0.0;
-    double pagoMovil = 0.0;
-    double transferencia = 0.0;
-    double puntoVenta = 0.0;
-    double pendiente = 0.0;
-  
-    // ✅ Procesar todas las ventas y sumar por método
+
+    double totalEfectivoUSD = 0.0;
+    double totalBolivaresVES = 0.0;
+
+    final Map<String, double> paymentMethodsUSD = {
+      'Efectivo USD': 0.0,
+      'Efectivo Bs.': 0.0,
+      'Pago Móvil': 0.0,
+      'Transferencia': 0.0,
+      'Punto de Venta': 0.0,
+    };
+    final Map<String, double> paymentMethodsVES = {
+      'Efectivo USD': 0.0,
+      'Efectivo Bs.': 0.0,
+      'Pago Móvil': 0.0,
+      'Transferencia': 0.0,
+      'Punto de Venta': 0.0,
+    };
+
     for (var sale in sales) {
       for (var payment in sale.payments) {
         final method = payment.method;
         final amountUSD = payment.amount;
-        final amountVES = amountUSD * sale.exchangeRate;
-  
-        switch (method) {
-          case 'Efectivo USD':
-          case 'efectivoUsd':
-          case 'Efectivo ($)':
-            efectivoUSD += amountUSD;
-            break;
-          case 'Efectivo Bs.':
-          case 'Efectivo (Bs)':
-          case 'efectivoBs':
-            efectivoBS += amountVES;
-            break;
-          case 'Pago Móvil':
-          case 'Pago Movil':
-          case 'pagoMovil':
-            pagoMovil += amountVES;
-            break;
-          case 'Transferencia':
-          case 'transferencia':
-            transferencia += amountVES;
-            break;
-          case 'Punto de Venta':
-          case 'Tarjeta (Punto)':
-          case 'puntoVenta':
-            puntoVenta += amountVES;
-            break;
-          case 'Pendiente (Por Cobrar)':
-          case 'pendiente':
-            pendiente += amountVES;
-            break;
-          default:
-            // Métodos personalizados se suman a efectivo BS
-            efectivoBS += amountVES;
+        final amountVES = payment.amount * sale.exchangeRate;
+
+        if (paymentMethodsUSD.containsKey(method)) {
+          paymentMethodsUSD[method] = paymentMethodsUSD[method]! + amountUSD;
+          paymentMethodsVES[method] = paymentMethodsVES[method]! + amountVES;
+        } else if (method != 'Pendiente (Por Cobrar)' && method != 'pendiente') {
+          paymentMethodsUSD[method] = (paymentMethodsUSD[method] ?? 0.0) + amountUSD;
+          paymentMethodsVES[method] = (paymentMethodsVES[method] ?? 0.0) + amountVES;
+        }
+
+        if (method == 'Efectivo USD' || method == 'efectivoUsd') {
+          totalEfectivoUSD += amountUSD;
+        } else if (method != 'Pendiente (Por Cobrar)' && method != 'pendiente') {
+          totalBolivaresVES += amountVES;
         }
       }
     }
-  
-    // ✅ Calcular totales generales
-    final totalTransacciones = sales.length;
-  
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(8),
+        margin: const pw.EdgeInsets.all(10),
         build: (pw.Context context) {
+          
+          pw.TableRow buildRow(String left, String right, {bool isHeader = false}) {
+            return pw.TableRow(
+              children: [
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(4),
+                  child: pw.Text(left, style: pw.TextStyle(fontSize: 9, fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal)),
+                ),
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(4),
+                  child: pw.Text(right, textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9, fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal)),
+                ),
+              ],
+            );
+          }
+
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // ─────────────────────────────────────────────
-              // ENCABEZADO
-              // ─────────────────────────────────────────────
-              pw.Center(
-                child: pw.Text(
-                  'Inventary 1.9.3',
-                  style: pw.TextStyle(
-                    fontSize: 18,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-              ),
-              pw.Center(
-                child: pw.Text(
-                  'CIERRE DE CAJA',
-                  style: pw.TextStyle(
-                    fontSize: 12,
-                    fontWeight: pw.FontWeight.normal,
-                  ),
-                ),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Fecha de cierre:', style: pw.TextStyle(fontSize: 9)),
-                  pw.Text(
-                    DateTime.now().toString().split('.')[0],
-                    style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 3),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Total transacciones:', style: pw.TextStyle(fontSize: 9)),
-                  pw.Text(
-                    totalTransacciones.toString(),
-                    style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 8),
-              pw.Text('────────────────────────────────────────', style: pw.TextStyle(fontSize: 8)),
-              pw.SizedBox(height: 8),
-  
-              // ─────────────────────────────────────────────
-              // RESUMEN DE VENTAS (Lista de facturas)
-              // ─────────────────────────────────────────────
-              pw.Text(
-                'RESUMEN DE VENTAS',
-                style: pw.TextStyle(
-                  fontSize: 11,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 5),
-              ...sales.map((sale) {
-                final saleId = sale.id.length > 8 ? '${sale.id.substring(0, 8)}...' : sale.id;
-                final time = sale.date.toString().split(' ')[1].substring(0, 5);
-                return pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 3),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(
-                        'ID: $saleId | $time',
-                        style: const pw.TextStyle(fontSize: 8),
-                      ),
-                      pw.Text(
-                        '\$${sale.totalUSD.toStringAsFixed(2)} / Bs. ${sale.totalVES.toStringAsFixed(2)}',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-              pw.SizedBox(height: 8),
-              pw.Text('────────────────────────────────────────', style: pw.TextStyle(fontSize: 8)),
-              pw.SizedBox(height: 8),
-  
-              // ─────────────────────────────────────────────
-              // RESUMEN POR MÉTODO DE PAGO
-              // ─────────────────────────────────────────────
-              pw.Text(
-                'RESUMEN POR MÉTODO DE PAGO',
-                style: pw.TextStyle(
-                  fontSize: 11,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 5),
-              
-              // Efectivo Bs (solo si hay monto)
-              if (efectivoBS > 0) ...[
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Efectivo (Bs):', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          '\$${(efectivoBS / (sales.isNotEmpty ? sales.first.exchangeRate : 1)).toStringAsFixed(2)}',
-                          style: pw.TextStyle(fontSize: 8),
-                        ),
-                        pw.Text(
-                          'Bs. ${efectivoBS.toStringAsFixed(2)}',
-                          style: pw.TextStyle(
-                            fontSize: 9,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-              ],
-              
-              // Efectivo USD (SOLO en dólares, sin conversión a bolivares)
-              if (efectivoUSD > 0) ...[
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Efectivo (\$):', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          '\$${efectivoUSD.toStringAsFixed(2)}',
-                          style: pw.TextStyle(
-                            fontSize: 9,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-              ],
-              
-              // Pago Móvil
-              if (pagoMovil > 0) ...[
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Pago Móvil:', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          '\$${(pagoMovil / (sales.isNotEmpty ? sales.first.exchangeRate : 1)).toStringAsFixed(2)}',
-                          style: pw.TextStyle(fontSize: 8),
-                        ),
-                        pw.Text(
-                          'Bs. ${pagoMovil.toStringAsFixed(2)}',
-                          style: pw.TextStyle(
-                            fontSize: 9,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-              ],
-              
-              // Transferencia
-              if (transferencia > 0) ...[
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Transferencia:', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          '\$${(transferencia / (sales.isNotEmpty ? sales.first.exchangeRate : 1)).toStringAsFixed(2)}',
-                          style: pw.TextStyle(fontSize: 8),
-                        ),
-                        pw.Text(
-                          'Bs. ${transferencia.toStringAsFixed(2)}',
-                          style: pw.TextStyle(
-                            fontSize: 9,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-              ],
-              
-              // Punto de Venta / Tarjeta
-              if (puntoVenta > 0) ...[
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Tarjeta (Punto):', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          '\$${(puntoVenta / (sales.isNotEmpty ? sales.first.exchangeRate : 1)).toStringAsFixed(2)}',
-                          style: pw.TextStyle(fontSize: 8),
-                        ),
-                        pw.Text(
-                          'Bs. ${puntoVenta.toStringAsFixed(2)}',
-                          style: pw.TextStyle(
-                            fontSize: 9,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-              ],
-              
-              // Pendiente (si hay)
-              if (pendiente > 0) ...[
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Pendiente (Por Cobrar):', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          '\$${(pendiente / (sales.isNotEmpty ? sales.first.exchangeRate : 1)).toStringAsFixed(2)}',
-                          style: pw.TextStyle(fontSize: 8),
-                        ),
-                        pw.Text(
-                          'Bs. ${pendiente.toStringAsFixed(2)}',
-                          style: pw.TextStyle(
-                            fontSize: 9,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-              ],
-              
-              pw.Text('────────────────────────────────────────', style: pw.TextStyle(fontSize: 8)),
-              pw.SizedBox(height: 8),
-  
-              // ─────────────────────────────────────────────
-              // DETALLE DE PRODUCTOS VENDIDOS (NUEVO)
-              // ─────────────────────────────────────────────
-              pw.Text(
-                'DETALLE DE PRODUCTOS VENDIDOS',
-                style: pw.TextStyle(
-                  fontSize: 11,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 5),
-              ...sales.expand((sale) {
-                if (sale.details.isEmpty) return [];
-                return [
-                  // Encabezado de factura
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.only(bottom: 2, top: 4),
-                    child: pw.Text(
-                      'Factura ID: ${sale.id.length > 8 ? '${sale.id.substring(0, 8)}...' : sale.id}',
-                      style: pw.TextStyle(
-                        fontSize: 9,
-                        fontWeight: pw.FontWeight.bold,
-                        decoration: pw.TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                  // Lista de productos de esta factura
-                  ...sale.details.map((detail) {
-                    return pw.Padding(
-                      padding: const pw.EdgeInsets.only(bottom: 2),
-                      child: pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Expanded(
-                            child: pw.Text(
-                              '${detail.quantity}x ${detail.productName.length > 25 ? '${detail.productName.substring(0, 25)}...' : detail.productName}',
-                              style: const pw.TextStyle(fontSize: 8),
-                            ),
-                          ),
-                          pw.Text(
-                            '\$${(detail.quantity * detail.unitPriceUSD).toStringAsFixed(2)}',
-                            style: pw.TextStyle(
-                              fontSize: 8,
-                              fontWeight: pw.FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ];
-              }).toList(),
-              pw.SizedBox(height: 8),
-              pw.Text('────────────────────────────────────────', style: pw.TextStyle(fontSize: 8)),
-              pw.SizedBox(height: 8),
-  
-              // ─────────────────────────────────────────────
-              // TOTALES DEL PERÍODO
-              // ─────────────────────────────────────────────
+              // Encabezado Inventary
+              pw.Center(child: pw.Text('Inventary', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold))),
+              pw.SizedBox(height: 4),
+              pw.Center(child: pw.Text('CIERRE DE CAJA', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
+              pw.SizedBox(height: 12),
+
+              // Bloque de Información
               pw.Container(
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(width: 1.5),
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                ),
-                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
+                padding: const pw.EdgeInsets.all(4),
                 child: pw.Column(
                   children: [
-                    pw.Center(
-                      child: pw.Text(
-                        'TOTALES DEL PERÍODO',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    pw.SizedBox(height: 8),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text(
-                          'TOTAL USD:',
-                          style: pw.TextStyle(
-                            fontSize: 12,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                        pw.Text(
-                          '\$${totalUSD.toStringAsFixed(2)}',
-                          style: pw.TextStyle(
-                            fontSize: 14,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                        pw.Text('ID TERMINAL:', style: const pw.TextStyle(fontSize: 9)),
+                        pw.Text('12345', style: const pw.TextStyle(fontSize: 9)),
+                      ]
                     ),
-                    pw.SizedBox(height: 4),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text(
-                          'TOTAL VES:',
-                          style: pw.TextStyle(
-                            fontSize: 12,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                        pw.Text(
-                          'Bs. ${totalVES.toStringAsFixed(2)}',
-                          style: pw.TextStyle(
-                            fontSize: 14,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                        pw.Text('ID CAJERO:', style: const pw.TextStyle(fontSize: 9)),
+                        pw.Text('ADMIN', style: const pw.TextStyle(fontSize: 9)),
+                      ]
                     ),
-                  ],
-                ),
+                  ]
+                )
               ),
               pw.SizedBox(height: 8),
-              pw.Text('────────────────────────────────────────', style: pw.TextStyle(fontSize: 8)),
-              pw.SizedBox(height: 5),
-              pw.Center(
-                child: pw.Text(
-                  'FIN DEL REPORTE',
-                  style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic),
-                ),
+
+              pw.Text('Fecha: ${DateTime.now().toString().split('.')[0]}', style: const pw.TextStyle(fontSize: 9)),
+              pw.Text('Facturas emitidas: ${sales.length}', style: const pw.TextStyle(fontSize: 9)),
+              pw.SizedBox(height: 12),
+
+              // TABLA 1: RESUMEN DE CAJA
+              pw.Container(
+                width: double.infinity,
+                color: PdfColors.grey300,
+                padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                child: pw.Center(child: pw.Text('RESUMEN DE CAJA', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
               ),
+              pw.Table(
+                border: pw.TableBorder.all(width: 1),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(2),
+                  1: const pw.FlexColumnWidth(1),
+                },
+                children: [
+                  buildRow('CONCEPTO', 'VALOR', isHeader: true),
+                  buildRow('Total Bruto (USD)', '\$${totalUSD.toStringAsFixed(2)}'),
+                  buildRow('Efectivo Físico (\$)', '\$${totalEfectivoUSD.toStringAsFixed(2)}'),
+                  buildRow('Cuentas (VES)', 'Bs. ${totalBolivaresVES.toStringAsFixed(2)}'),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+
+              // TABLA 2: DESGLOSE DE PAGOS
+              pw.Container(
+                width: double.infinity,
+                color: PdfColors.grey300,
+                padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                child: pw.Center(child: pw.Text('DESGLOSE DE PAGOS', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+              ),
+              pw.Table(
+                border: pw.TableBorder.all(width: 1),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(2),
+                  1: const pw.FlexColumnWidth(1),
+                },
+                children: [
+                  buildRow('MÉTODO DE PAGO', 'Bs./\$ TOTAL', isHeader: true),
+                  ...paymentMethodsUSD.entries.map((e) {
+                    final method = e.key;
+                    final usd = e.value;
+                    final ves = paymentMethodsVES[method] ?? 0.0;
+                    
+                    final displayAmount = (method == 'Efectivo USD') 
+                        ? '\$${usd.toStringAsFixed(2)}' 
+                        : 'Bs. ${ves.toStringAsFixed(2)}';
+
+                    return buildRow(method, displayAmount);
+                  }).toList(),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+
+              // TABLA 3: DETALLE DE ARTÍCULOS
+              pw.Container(
+                width: double.infinity,
+                color: PdfColors.grey300,
+                padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                child: pw.Center(child: pw.Text('DETALLE DE ARTÍCULOS', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+              ),
+              pw.Container(
+                decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
+                padding: const pw.EdgeInsets.all(4),
+                child: pw.Column(
+                  children: sales.expand((sale) {
+                    return sale.details.map((d) {
+                      return pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                        child: pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Expanded(child: pw.Text('${d.quantity}x ${d.productName}', style: const pw.TextStyle(fontSize: 9))),
+                            pw.Text('\$${(d.quantity * d.unitPriceUSD).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
+                          ]
+                        )
+                      );
+                    });
+                  }).toList(),
+                )
+              ),
+
+              pw.SizedBox(height: 20),
+              pw.Center(child: pw.Text('** FIN DEL REPORTE **', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
             ],
           );
         },

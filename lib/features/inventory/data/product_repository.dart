@@ -216,12 +216,12 @@ class ProductRepository {
       
     } catch (e) {
       if (isSyncing) rethrow;
-      debugPrint('[ProductRepo] Sin internet: Encolando edición de producto.');
+      debugPrint('[ProductRepo] Sin internet: Guardando edición completa localmente.');
       
-      // ✅ 1. Actualiza caché local para que la UI cambie de inmediato
+      // 1. Actualiza la caché visual inmediatamente para que cambie en pantalla
       await _updateLocalCacheProduct(product);
       
-      // ✅ 2. Creamos el mapa manualmente porque product.toJson() NO existe
+      // 2. Guarda todos los datos en el bolsillo que creamos en el Paso 2
       final productMap = {
         'id': product.id,
         'name': product.name,
@@ -232,11 +232,7 @@ class ProductRepository {
         'barCode': product.barCode,
       };
 
-      await localStorageService.addPendingInventoryUpdate({
-        'type': 'edit',
-        'product': productMap,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
+      await localStorageService.addPendingProductEdit(productMap);
     }
   }
 

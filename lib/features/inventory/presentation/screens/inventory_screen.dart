@@ -4,6 +4,7 @@ import 'package:inventary/core/widgets/shimmer_loading.dart';
 import 'package:inventary/core/widgets/empty_state.dart';
 import 'package:inventary/features/inventory/domain/product.dart';
 import 'package:inventary/core/providers/core_providers.dart';
+import '../../../reports/domain/movement.dart';
 import 'package:inventary/features/settings/presentation/providers/settings_provider.dart';
 import '../providers/inventory_provider.dart';
 import 'add_product_screen.dart';
@@ -218,53 +219,96 @@ class InventoryScreen extends ConsumerWidget {
 
   void _showSurtirDialog(BuildContext context, WidgetRef ref, Product product) {
     final quantityController = TextEditingController(text: '0');
-    
+    final costController = TextEditingController(text: product.costPriceUSD.toString());
+    final priceController = TextEditingController(text: product.salePriceUSD.toString());
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Surtir: ${product.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Stock actual: ${product.stockQuantity}'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: quantityController,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Cantidad a agregar',
-                border: OutlineInputBorder(),
+        title: Text('Surtir: ${product.name}', style: const TextStyle(fontSize: 18)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Stock actual: ${product.stockQuantity}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: quantityController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Unidades a ingresar', border: OutlineInputBorder()),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: costController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Precio de Compra (USD)', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: priceController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Precio de Venta (USD)', border: OutlineInputBorder()),
+              ),
+            ],
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
             onPressed: () async {
               final qty = int.tryParse(quantityController.text) ?? 0;
+              final cost = double.tryParse(costController.text.replaceAll(',', '.')) ?? product.costPriceUSD;
+              final price = double.tryParse(priceController.text.replaceAll(',', '.')) ?? product.salePriceUSD;
+
               if (qty > 0) {
                 Navigator.pop(context);
-                // Llama a updateStock sumando la cantidad
-                await ref.read(productRepositoryProvider).updateStock(
-                  product.id, 
-                  product.stockQuantity + qty
+                
+                // 1. Actualizar todo el producto con los nuevos precios y stock
+                final updatedProduct = Product(
+                  id: product.id,
+                  name: product.name,
+                  description: product.description,
+                  costPriceUSD: cost,
+                  salePriceUSD: price,
+                  stockQuantity: product.stockQuantity + qty,
+                  barCode: product.barCode,
                 );
+                
+                await ref.read(productRepositoryProvider).updateProduct(updatedProduct);
+
+                // 2. Registrar el gasto en el apartado de Movimientos (Egreso)
+                final rate = ref.read(exchangeRateProvider).value?.rate ?? 36.0;
+                final totalCostUSD = cost * qty;
+                final totalCostVES = totalCostUSD * rate;
+
+                final mov = Movement(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  date: DateTime.now(),
+                  type: 'Egreso',
+                  amountUSD: totalCostUSD,
+                  amountVES: totalCostVES,
+                  description: 'Surtido de inventario: ${product.name} (+$qty unds)',
+                );
+                
+                try {
+                  await ref.read(movementRepositoryProvider).addMovement(mov);
+                } catch(e) {
+                  debugPrint('Movimiento encolado offline');
+                }
+
+                // 3. Recargar las pantallas
                 ref.invalidate(inventoryProvider);
+                
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Stock actualizado')),
-                  );
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Stock surtido y egreso registrado con éxito'), backgroundColor: Colors.teal,
+                  ));
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-            child: const Text('Confirmar'),
+            child: const Text('Confirmar Surtido'),
           ),
         ],
       ),

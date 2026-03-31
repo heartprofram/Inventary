@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalStorageService {
   static const String _salesQueue = 'sales_queue';
@@ -104,5 +105,27 @@ class LocalStorageService {
 
   Future<Box> _getBox(String name) async {
     return Hive.isBoxOpen(name) ? Hive.box(name) : await Hive.openBox(name);
+  }
+
+  // --- MÉTODOS EXCLUSIVOS PARA EDICIÓN DE PRODUCTOS OFFLINE ---
+  Future<void> addPendingProductEdit(Map<String, dynamic> productMap) async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String> current = prefs.getStringList('pending_product_edits') ?? [];
+    current.removeWhere((item) => jsonDecode(item)['id'] == productMap['id']);
+    current.add(jsonEncode(productMap));
+    await prefs.setStringList('pending_product_edits', current);
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingProductEdits() async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String> current = prefs.getStringList('pending_product_edits') ?? [];
+    return current.map((e) => jsonDecode(e) as Map<String, dynamic>).toList();
+  }
+
+  Future<void> removePendingProductEdit(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String> current = prefs.getStringList('pending_product_edits') ?? [];
+    current.removeWhere((item) => jsonDecode(item)['id'] == id);
+    await prefs.setStringList('pending_product_edits', current);
   }
 }
