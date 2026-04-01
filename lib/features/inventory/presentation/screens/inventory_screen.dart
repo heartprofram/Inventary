@@ -4,14 +4,12 @@ import 'package:inventary/core/widgets/shimmer_loading.dart';
 import 'package:inventary/core/widgets/empty_state.dart';
 import 'package:inventary/features/inventory/domain/product.dart';
 import 'package:inventary/core/providers/core_providers.dart';
-import '../../../reports/domain/movement.dart';
 import 'package:inventary/features/settings/presentation/providers/settings_provider.dart';
+import 'package:inventary/features/reports/domain/movement.dart';
 import '../providers/inventory_provider.dart';
 import 'add_product_screen.dart';
 import 'edit_product_screen.dart';
 
-
-// Provider local para filtro de búsqueda en inventario
 final inventorySearchQueryProvider = StateProvider<String>((ref) => '');
 
 class InventoryScreen extends ConsumerWidget {
@@ -22,7 +20,6 @@ class InventoryScreen extends ConsumerWidget {
     final inventoryState = ref.watch(inventoryProvider);
     final searchQuery = ref.watch(inventorySearchQueryProvider);
 
-    // Calcular Valor Total de Venta (USD)
     final totalSalesValue = inventoryState.when(
       data: (products) => products.fold<double>(0, (sum, p) => sum + (p.salePriceUSD * p.stockQuantity)),
       loading: () => 0.0,
@@ -46,9 +43,9 @@ class InventoryScreen extends ConsumerWidget {
                     icon: const Icon(Icons.clear),
                   ),
               ],
-              elevation: MaterialStateProperty.all(1),
-              backgroundColor: MaterialStateProperty.all(Colors.grey[100]),
-              shape: MaterialStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              elevation: WidgetStateProperty.all(1),
+              backgroundColor: WidgetStateProperty.all(Colors.grey[100]),
+              shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
             ),
           ),
           Expanded(
@@ -124,7 +121,6 @@ class InventoryScreen extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        // BOTONES SIMÉTRICOS A LA DERECHA
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -217,136 +213,102 @@ class InventoryScreen extends ConsumerWidget {
     );
   }
 
-void _showSurtirDialog(BuildContext context, WidgetRef ref, Product product) {
-  final quantityController = TextEditingController();
-  final costController = TextEditingController(text: product.costPriceUSD.toStringAsFixed(2));
-  final saleController = TextEditingController(text: product.salePriceUSD.toStringAsFixed(2));
+  void _showSurtirDialog(BuildContext context, WidgetRef ref, Product product) {
+    final quantityController = TextEditingController();
+    final costController = TextEditingController(text: product.costPriceUSD.toStringAsFixed(2));
+    final saleController = TextEditingController(text: product.salePriceUSD.toStringAsFixed(2));
 
-  showDialog(
-    context: context,
-    builder: (BuildContext dialogContext) => AlertDialog(
-      title: Text('Surtir: ${product.name}'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Stock actual: ${product.stockQuantity}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: quantityController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Unidades a ingresar',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.add_box_outlined),
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Surtir: ${product.name}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Stock actual: ${product.stockQuantity}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: quantityController,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Unidades a ingresar', border: OutlineInputBorder()),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: costController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Precio de Compra (USD)',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.trending_down),
-                prefixText: '\$ ',
+              const SizedBox(height: 12),
+              TextField(
+                controller: costController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Precio de Compra (USD)', border: OutlineInputBorder()),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: saleController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Precio de Venta (USD)',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.trending_up),
-                prefixText: '\$ ',
+              const SizedBox(height: 12),
+              TextField(
+                controller: saleController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Precio de Venta (USD)', border: OutlineInputBorder()),
               ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton.icon(
-          onPressed: () async {
-            final qtyStr = quantityController.text.trim();
-            final costStr = costController.text.trim();
-            final saleStr = saleController.text.trim();
-
-            final qty = int.tryParse(qtyStr) ?? 0;
-            final cost = double.tryParse(costStr.replaceAll(',', '.')) ?? product.costPriceUSD;
-            final sale = double.tryParse(saleStr.replaceAll(',', '.')) ?? product.salePriceUSD;
-
-            if (qty <= 0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Ingresa unidades válidas')),
-              );
-              return;
-            }
-
-            Navigator.of(dialogContext).pop();
-
-            final updatedProduct = Product(
-              id: product.id,
-              name: product.name,
-              description: product.description,
-              costPriceUSD: cost,
-              salePriceUSD: sale,
-              stockQuantity: product.stockQuantity + qty,
-              barCode: product.barCode,
-            );
-
-            await ref.read(productRepositoryProvider).updateProduct(updatedProduct);
-
-            final totalCost = qty * cost;
-            try {
-              final movement = Movement(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                date: DateTime.now(),
-                type: 'Egreso',
-                amountUSD: totalCost,
-                amountVES: totalCost * (ref.read(exchangeRateProvider).value?.rate ?? 36.0),
-                description: 'Surtido ${product.name}: +${qty}und @\$${cost.toStringAsFixed(2)}',
-              );
-              await ref.read(movementRepositoryProvider).addMovement(movement);
-            } catch (e) {
-              // Silencioso offline
-            }
-
-            ref.invalidate(inventoryProvider);
-
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Surtido ${qty}und de ${product.name} ✅'),
-                  backgroundColor: Colors.teal,
-                ),
-              );
-            }
-          },
-          icon: const Icon(Icons.check, size: 18),
-          label: const Text('Confirmar'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.teal,
-            foregroundColor: Colors.white,
+            ],
           ),
         ),
-      ],
-    ),
-  ).then((_) {
-    quantityController.dispose();
-    costController.dispose();
-    saleController.dispose();
-  });
-}
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final qty = int.tryParse(quantityController.text) ?? 0;
+              final cost = double.tryParse(costController.text.replaceAll(',', '.')) ?? product.costPriceUSD;
+              final price = double.tryParse(saleController.text.replaceAll(',', '.')) ?? product.salePriceUSD;
+
+              if (qty > 0) {
+                Navigator.pop(context);
+                
+                final updatedProduct = Product(
+                  id: product.id,
+                  name: product.name,
+                  description: product.description,
+                  costPriceUSD: cost,
+                  salePriceUSD: price,
+                  stockQuantity: product.stockQuantity + qty,
+                  barCode: product.barCode,
+                );
+                
+                await ref.read(productRepositoryProvider).updateProduct(updatedProduct);
+
+                // CORRECCIÓN: Usando amountUSD y amountVES en lugar de solo amount
+                final rate = ref.read(exchangeRateProvider).value?.rate ?? 36.0;
+                final totalCost = cost * qty;
+                final mov = Movement(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  date: DateTime.now(),
+                  type: 'Egreso',
+                  amountUSD: totalCost,
+                  amountVES: totalCost * rate,
+                  description: 'Surtido de inventario: ${product.name} (+$qty unds)',
+                );
+                
+                try {
+                  await ref.read(movementRepositoryProvider).addMovement(mov);
+                } catch(e) {
+                  debugPrint('Movimiento encolado offline');
+                }
+
+                ref.invalidate(inventoryProvider);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Stock actualizado y egreso registrado')),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _navigateToAdd(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => const AddProductScreen()));

@@ -6,8 +6,6 @@ import '../../../core/services/local_storage_service.dart';
 import '../../../core/constants/app_constants.dart';
 import '../domain/product.dart';
 
-// SOLUCIÓN: IMPORT DE HIVE ELIMINADO
-
 class ProductRepository {
   final Dio dio;
   final GoogleApiService googleApi;
@@ -37,12 +35,10 @@ class ProductRepository {
       }
       
       if (rows.isNotEmpty) {
-        // SOLUCIÓN: Usar servicio inyectado
         await localStorageService.saveCache('inventory_box', cacheKey, rows);
       }
     } catch (e) {
       debugPrint('[ProductRepo] Red fallida, usando caché local.');
-      // SOLUCIÓN: Usar servicio inyectado
       rows = await localStorageService.getCache('inventory_box', cacheKey, defaultValue: []) as List<dynamic>;
     }
 
@@ -137,7 +133,15 @@ class ProductRepository {
       debugPrint('[ProductRepo] Sin internet: Encolando adición de producto.');
       await localStorageService.addPendingInventoryUpdate({
         'type': 'add',
-        'product': product.toJson(),
+        'product': {
+          'id': product.id,
+          'name': product.name,
+          'description': product.description,
+          'costPriceUSD': product.costPriceUSD,
+          'salePriceUSD': product.salePriceUSD,
+          'stockQuantity': product.stockQuantity,
+          'barCode': product.barCode,
+        },
       });
       await _addToLocalCache(product);
     }
@@ -211,17 +215,14 @@ class ProductRepository {
         }
       }
       
-      // Éxito: Actualizamos la caché local
       await _updateLocalCacheProduct(product);
       
     } catch (e) {
       if (isSyncing) rethrow;
-      debugPrint('[ProductRepo] Sin internet: Guardando edición completa localmente.');
+      debugPrint('[ProductRepo] Sin internet: Encolando edición de producto.');
       
-      // 1. Actualiza la caché visual inmediatamente para que cambie en pantalla
       await _updateLocalCacheProduct(product);
       
-      // 2. Guarda todos los datos en el bolsillo que creamos en el Paso 2
       final productMap = {
         'id': product.id,
         'name': product.name,
@@ -236,7 +237,6 @@ class ProductRepository {
     }
   }
 
-  // NUEVO MÉTODO: Eliminar Producto
   Future<void> deleteProduct(String productId, {bool isSyncing = false}) async {
     try {
       if (!kIsWeb) {

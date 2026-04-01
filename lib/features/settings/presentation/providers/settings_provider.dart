@@ -13,6 +13,9 @@ final bcvApiServiceProvider = Provider<BcvApiService>((ref) {
 class ExchangeRateNotifier extends AsyncNotifier<ExchangeRate> {
   static const _rateKey = 'manual_exchange_rate';
   static const _isAutoKey = 'is_auto_exchange_rate';
+  static const _cachedRateKey =
+      'cached_exchange_rate'; // NUEVA CLAVE PARA LA CACHÉ OFFLINE
+
   Timer? _refreshTimer;
 
   @override
@@ -24,19 +27,27 @@ class ExchangeRateNotifier extends AsyncNotifier<ExchangeRate> {
   Future<ExchangeRate> _loadInitialRate() async {
     final prefs = await SharedPreferences.getInstance();
     final isAuto = prefs.getBool(_isAutoKey) ?? true;
-    
+
     if (isAuto) {
       try {
         final rate = await ref.read(bcvApiServiceProvider).getCurrentRate();
+
+        // 🔴 CORRECCIÓN: Guardamos la tasa automática exitosa en la memoria del teléfono
+        await prefs.setDouble(_cachedRateKey, rate.rate);
+
         _startTimer();
         return rate;
       } catch (e) {
-        // Fallback a manual si falla la API
-        final manualRate = prefs.getDouble(_rateKey) ?? 36.0;
-        return ExchangeRate(rate: manualRate, lastUpdated: DateTime.now());
+        // 🔴 CORRECCIÓN: Si falla la API (No hay internet), buscamos la última tasa de la caché
+        final lastKnownRate =
+            prefs.getDouble(_cachedRateKey) ??
+            prefs.getDouble(_rateKey) ??
+            36.0;
+        return ExchangeRate(rate: lastKnownRate, lastUpdated: DateTime.now());
       }
     } else {
-      final manualRate = prefs.getDouble(_rateKey) ?? 36.0;
+      final manualRate =
+          prefs.getDouble(_rateKey) ?? prefs.getDouble(_cachedRateKey) ?? 36.0;
       return ExchangeRate(rate: manualRate, lastUpdated: DateTime.now());
     }
   }
@@ -58,6 +69,10 @@ class ExchangeRateNotifier extends AsyncNotifier<ExchangeRate> {
 
     try {
       final rate = await ref.read(bcvApiServiceProvider).getCurrentRate();
+
+      // 🔴 CORRECCIÓN: Si la actualización en segundo plano es exitosa, también actualizamos la caché
+      await prefs.setDouble(_cachedRateKey, rate.rate);
+
       state = AsyncValue.data(rate);
     } catch (_) {
       // Silently fail on background refresh
@@ -68,10 +83,14 @@ class ExchangeRateNotifier extends AsyncNotifier<ExchangeRate> {
     state = const AsyncValue.loading();
     try {
       final rate = await ref.read(bcvApiServiceProvider).getCurrentRate();
-      state = AsyncValue.data(rate);
-      
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_isAutoKey, true);
+
+      // 🔴 CORRECCIÓN: Guardamos también cuando el usuario presiona actualizar manualmente
+      await prefs.setDouble(_cachedRateKey, rate.rate);
+
+      state = AsyncValue.data(rate);
       _startTimer();
     } catch (e) {
       state = AsyncValue.error(e, StackTrace.current);
@@ -82,13 +101,21 @@ class ExchangeRateNotifier extends AsyncNotifier<ExchangeRate> {
     _refreshTimer?.cancel();
     state = const AsyncValue.loading();
     final prefs = await SharedPreferences.getInstance();
+
     await prefs.setDouble(_rateKey, newRate);
+    await prefs.setDouble(
+      _cachedRateKey,
+      newRate,
+    ); // Sincronizamos la caché con la manual
     await prefs.setBool(_isAutoKey, false);
-    
-    state = AsyncValue.data(ExchangeRate(rate: newRate, lastUpdated: DateTime.now()));
+
+    state = AsyncValue.data(
+      ExchangeRate(rate: newRate, lastUpdated: DateTime.now()),
+    );
   }
 }
 
-final exchangeRateProvider = AsyncNotifierProvider<ExchangeRateNotifier, ExchangeRate>(() {
-  return ExchangeRateNotifier();
-});
+final exchangeRateProvider =
+    AsyncNotifierProvider<ExchangeRateNotifier, ExchangeRate>(() {
+      return ExchangeRateNotifier();
+    });

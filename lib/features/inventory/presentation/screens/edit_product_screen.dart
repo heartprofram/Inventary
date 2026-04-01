@@ -27,7 +27,6 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
   @override
   void initState() {
     super.initState();
-    // Llenar los campos con la información actual del producto
     _idController = TextEditingController(text: widget.product.id);
     _nameController = TextEditingController(text: widget.product.name);
     _descController = TextEditingController(text: widget.product.description);
@@ -52,22 +51,28 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
           barCode: _barcodeController.text,
         );
 
-        // Llamamos al repositorio para actualizar en Google Sheets
         await ref.read(productRepositoryProvider).updateProduct(updatedProduct);
-        // Refrescamos la lista del inventario para que muestre los cambios
         ref.invalidate(inventoryProvider);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Producto actualizado con éxito', style: TextStyle(color: Colors.white)), backgroundColor: Colors.blue),
+            const SnackBar(content: Text('Producto guardado exitosamente', style: TextStyle(color: Colors.white)), backgroundColor: Colors.blue),
           );
-          Navigator.pop(context); // Regresar al inventario
+          Navigator.pop(context);
         }
       } catch (e) {
+        // Al atrapar el error (Sin Internet), simplemente recargamos 
+        // el inventario porque el Repositorio ya lo guardó en la caché local.
+        ref.invalidate(inventoryProvider);
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error al actualizar: Asegúrate de tener conexión. ($e)', style: const TextStyle(color: Colors.white)), backgroundColor: Colors.red),
+            const SnackBar(
+              content: Text('Guardado localmente. Se sincronizará al conectar a internet.', style: TextStyle(color: Colors.white)), 
+              backgroundColor: Colors.orange
+            ),
           );
+          Navigator.pop(context);
         }
       } finally {
         if (mounted) {
@@ -94,7 +99,6 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Editar Producto'),
-        // ✅ Sin colores fijos - usa el tema del sistema
       ),
       body: _isLoading
         ? const Center(child: CircularProgressIndicator())
@@ -111,7 +115,7 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
                       border: OutlineInputBorder(),
                       filled: true,
                     ),
-                    readOnly: true, // El ID nunca debe cambiar
+                    readOnly: true,
                     style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
                   ),
                   const SizedBox(height: 10),
@@ -182,7 +186,6 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // 🔴 BOTÓN ELIMINAR PRODUCTO
                   SizedBox(
                     width: double.infinity,
                     height: 50,
@@ -234,10 +237,7 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
     if (confirmed == true && mounted) {
       setState(() => _isLoading = true);
       try {
-        // Llama al repositorio para eliminar
         await ref.read(productRepositoryProvider).deleteProduct(widget.product.id);
-        
-        // Invalida el provider para refrescar la lista
         ref.invalidate(inventoryProvider);
         
         if (mounted) {
@@ -247,16 +247,19 @@ class _EditProductScreenState extends ConsumerState<EditProductScreen> {
               backgroundColor: Colors.red,
             ),
           );
-          Navigator.pop(context); // Regresa al inventario
+          Navigator.pop(context); 
         }
       } catch (e) {
+        // También atrapamos el modo offline para la eliminación
+        ref.invalidate(inventoryProvider);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: $e', style: const TextStyle(color: Colors.white)),
-              backgroundColor: Colors.red,
+            const SnackBar(
+              content: Text('Eliminado localmente. Se sincronizará luego.', style: TextStyle(color: Colors.white)),
+              backgroundColor: Colors.orange,
             ),
           );
+          Navigator.pop(context);
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);

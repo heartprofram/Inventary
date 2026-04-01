@@ -8,11 +8,9 @@ class LocalStorageService {
   static const String _movementsQueue = 'movements_queue';
   static const String _inventoryQueue = 'inventory_queue';
   static const String _paymentsQueue = 'payments_queue';
-  static const String _defaultCacheBox = 'inventory_box';
 
   // ─── MÉTODOS DE CACHÉ GENÉRICA (SOLUCIÓN VIOLACIÓN DE CAPAS) ───────────────
 
-  // Guarda información en una caja específica de Hive
   Future<void> saveCache(String boxName, String key, dynamic data) async {
     if (!Hive.isBoxOpen(boxName)) {
       await Hive.openBox(boxName);
@@ -20,7 +18,6 @@ class LocalStorageService {
     await Hive.box(boxName).put(key, data);
   }
 
-  // Recupera información de una caja específica de Hive
   Future<dynamic> getCache(String boxName, String key, {dynamic defaultValue}) async {
     if (!Hive.isBoxOpen(boxName)) {
       await Hive.openBox(boxName);
@@ -74,7 +71,6 @@ class LocalStorageService {
     await box.add(update);
   }
 
-
   Future<void> removePendingInventoryUpdate(dynamic key) async {
     final box = await _getBox(_inventoryQueue);
     await box.delete(key);
@@ -107,7 +103,8 @@ class LocalStorageService {
     return Hive.isBoxOpen(name) ? Hive.box(name) : await Hive.openBox(name);
   }
 
-  // --- MÉTODOS EXCLUSIVOS PARA EDICIÓN DE PRODUCTOS OFFLINE ---
+  // ─── MÉTODOS EXCLUSIVOS PARA EDICIÓN DE PRODUCTOS OFFLINE ────────────────
+
   Future<void> addPendingProductEdit(Map<String, dynamic> productMap) async {
     final prefs = await SharedPreferences.getInstance();
     final List<String> current = prefs.getStringList('pending_product_edits') ?? [];
