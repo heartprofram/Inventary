@@ -126,6 +126,7 @@ class PdfInvoiceGenerator {
     String title = 'TOTALES',
     String labelUSD = 'TOTAL USD:',
     String labelVES = 'TOTAL VES:',
+    bool showVES = true,
   }) {
     return pw.Container(
       decoration: pw.BoxDecoration(
@@ -171,28 +172,30 @@ class PdfInvoiceGenerator {
               ),
             ],
           ),
-          pw.SizedBox(height: 6),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text(
-                labelVES,
-                style: pw.TextStyle(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: pw.FontWeight.bold,
+          if (showVES) ...[
+            pw.SizedBox(height: 6),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  labelVES,
+                  style: pw.TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
-              ),
-              pw.Text(
-                'Bs. ${totalVES.toStringAsFixed(2)}',
-                style: pw.TextStyle(
-                  color: color,
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
+                pw.Text(
+                  'Bs. ${totalVES.toStringAsFixed(2)}',
+                  style: pw.TextStyle(
+                    color: color,
+                    fontSize: 14,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -461,7 +464,7 @@ class PdfInvoiceGenerator {
                       ],
                     ),
                   );
-                }).toList(), // <-- CLAVE: .toList() AGREGADO
+                }).toList(),
 
               pw.SizedBox(height: 12),
               _buildTotalsBox(totalUSD, totalVES),
@@ -549,7 +552,7 @@ class PdfInvoiceGenerator {
                       ),
                     ),
                   )
-                  .toList(), // <-- CLAVE: .toList() AGREGADO
+                  .toList(),
               pw.SizedBox(height: 8),
 
               _buildSectionTitle('MÉTODO DE PAGO'),
@@ -576,7 +579,7 @@ class PdfInvoiceGenerator {
                       ),
                     ),
                   )
-                  .toList(), // <-- CLAVE: .toList() AGREGADO
+                  .toList(),
               pw.SizedBox(height: 12),
 
               _buildTotalsBox(sale.totalUSD, sale.totalVES),
@@ -603,7 +606,6 @@ class PdfInvoiceGenerator {
       }
     }
     if (pendienteUSD == 0.0) pendienteUSD = sale.totalUSD;
-    final pendienteVES = pendienteUSD * sale.exchangeRate;
 
     pdf.addPage(
       pw.Page(
@@ -629,10 +631,7 @@ class PdfInvoiceGenerator {
                 'Fecha:',
                 DateFormat('dd/MM/yyyy HH:mm').format(sale.date),
               ),
-              _buildInfoRow(
-                'Tasa BCV:',
-                '${sale.exchangeRate.toStringAsFixed(2)} VES/USD',
-              ),
+              // NOTA: Se ha quitado la tasa de BCV.
               _buildInfoRow(
                 'Deudor:',
                 sale.debtorName ?? 'Cliente No Registrado',
@@ -684,16 +683,16 @@ class PdfInvoiceGenerator {
                       ),
                     ),
                   )
-                  .toList(), // <-- CLAVE: .toList() AGREGADO
+                  .toList(),
               pw.SizedBox(height: 12),
 
               _buildTotalsBox(
                 pendienteUSD,
-                pendienteVES,
+                0.0,
                 color: _kOrange,
                 title: 'SALDO DEUDOR',
                 labelUSD: 'FALTA USD:',
-                labelVES: 'FALTA VES:',
+                showVES: false,
               ),
               pw.SizedBox(height: 10),
 
@@ -976,7 +975,7 @@ class PdfInvoiceGenerator {
                       ),
                     ],
                   );
-                }).toList(), // <-- CLAVE: .toList() AGREGADO AQUÍ TAMIÉN
+                }).toList(),
               ],
             ),
             pw.SizedBox(height: 20),
@@ -1045,7 +1044,7 @@ class PdfInvoiceGenerator {
                         ],
                       ),
                     )
-                    .toList(), // <-- CLAVE: .toList() AGREGADO AQUÍ
+                    .toList(),
               ],
             ),
           ];
