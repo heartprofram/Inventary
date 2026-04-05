@@ -1,55 +1,55 @@
-# ?? Manual de Usuario ñ Sistema de GestiÛn y POS
+#  Manual de Usuario ‚Äì Sistema de Gesti√≥n y POS
 
-Bienvenido a tu sistema integral para la gestiÛn de ventas, control de inventario, cuentas por cobrar y cierres de caja. Un men˙ de tipo hamburguesa ubicado a la derecha te permitir· navegar por todas las funciones principales de la aplicaciÛn.
+Bienvenido a tu sistema integral para la gesti√≥n de ventas, control de inventario, cuentas por cobrar y cierres de caja. Un men√∫ de tipo hamburguesa ubicado a la derecha te permitir√° navegar por todas las funciones principales de la aplicaci√≥n.
 
 ---
 
 ## 1. Arranque del Sistema y Tasa de Cambio (Ajustes)
-La aplicaciÛn inicia de manera predeterminada en el apartado de ventas, pero es fundamental conocer cÛmo maneja la moneda.
+La aplicaci√≥n inicia de manera predeterminada en el apartado de ventas, pero es fundamental conocer c√≥mo maneja la moneda.
 
-* **Tasa de Cambio Autom·tica:** El sistema comprueba y actualiza autom·ticamente el precio del dÛlar consultando la p·gina oficial cada hora del dÌa.
-* **Ajuste Manual:** Si es fin de semana, feriado, o necesitas cambiar el precio del dÛlar por tu cuenta, puedes hacer un ajuste manual. Al hacerlo, todos los precios del inventario se actualizar·n autom·ticamente.
-* **Restaurar Tasa Oficial:** Si deseas volver a la tasa del banco, simplemente selecciona la opciÛn "actualizar tasa BCV" para que el sistema vuelva a cargar el valor oficial.
+* **Tasa de Cambio Autom√°tica:** El sistema comprueba y actualiza autom√°ticamente el precio del d√≥lar consultando la p√°gina oficial cada hora del d√≠a.
+* **Ajuste Manual:** Si es fin de semana, feriado, o necesitas cambiar el precio del d√≥lar por tu cuenta, puedes hacer un ajuste manual. Al hacerlo, todos los precios del inventario se actualizar√°n autom√°ticamente.
+* **Restaurar Tasa Oficial:** Si deseas volver a la tasa del banco, simplemente selecciona la opci√≥n "actualizar tasa BCV" para que el sistema vuelva a cargar el valor oficial.
 
 ---
 
-## 2. MÛdulo de Ventas (Punto de Venta)
-AquÌ registrar·s las operaciones del dÌa a dÌa de tu negocio.
+## 2. M√≥dulo de Ventas (Punto de Venta)
+Aqu√≠ registrar√°s las operaciones del d√≠a a d√≠a de tu negocio.
 
-* **Agregar y Ajustar Productos:** Usa el buscador r·pido para localizar artÌculos y cargarlos al carrito. Una vez en el carrito, puedes sumar o restar cantidades, e incluso editar directamente el precio en dÛlares para aplicar un descuento; el sistema recalcular· los montos autom·ticamente.
-* **MÈtodos de Pago:** Tienes m˙ltiples opciones disponibles: efectivo con divisa, efectivo con bolÌvares, pago mÛvil, punto de venta, pago mixto y fiado (pago pendiente).
-* **Pago Mixto y ? el Rayo M·gico:** Si el cliente paga una parte en efectivo y otra por punto, ingresa el monto del primer mÈtodo de pago y luego presiona el Ìcono del rayo; el sistema calcular· autom·ticamente cu·nto es el restante exacto que se debe cobrar por el otro mÈtodo.
-* **GeneraciÛn de Recibos:** Al confirmar una venta, puedes generar un recibo en PDF para guardarlo o enviarlo al cliente a travÈs de WhatsApp, Messenger o correo electrÛnico.
-* **Fiado (Pago Pendiente):** Si el cliente dejar· la cuenta por pagar, selecciona "fiado" e ingresa el nombre de la persona (por ejemplo, "Edwin") para registrar la deuda.
+* **Agregar y Ajustar Productos:** Usa el buscador r√°pido para localizar art√≠culos y cargarlos al carrito. Una vez en el carrito, puedes sumar o restar cantidades, e incluso editar directamente el precio en d√≥lares para aplicar un descuento; el sistema recalcular√° los montos autom√°ticamente.
+* **M√©todos de Pago:** Tienes m√∫ltiples opciones disponibles: efectivo con divisa, efectivo con bol√≠vares, pago m√≥vil, punto de venta, pago mixto y fiado (pago pendiente).
+* **Pago Mixto y ? el Rayo M√°gico:** Si el cliente paga una parte en efectivo y otra por punto, ingresa el monto del primer m√©todo de pago y luego presiona el √≠cono del rayo; el sistema calcular√° autom√°ticamente cu√°nto es el restante exacto que se debe cobrar por el otro m√©todo.
+* **Generaci√≥n de Recibos:** Al confirmar una venta, puedes generar un recibo en PDF para guardarlo o enviarlo al cliente a trav√©s de WhatsApp, Messenger o correo electr√≥nico.
+* **Fiado (Pago Pendiente):** Si el cliente dejar√° la cuenta por pagar, selecciona "fiado" e ingresa el nombre de la persona (por ejemplo, "Edwin") para registrar la deuda.
 
 ---
 
 ## 3. Cuentas por Cobrar
-Todas las ventas registradas como "fiado" se procesan y almacenan en este mÛdulo.
+Todas las ventas registradas como "fiado" se procesan y almacenan en este m√≥dulo.
 
-* **Cobro Actualizado:** Cuando el cliente viene a pagar dÌas despuÈs, el sistema calcula autom·ticamente el monto equivalente en bolÌvares bas·ndose en la tasa del dÛlar del dÌa actual.
-* **LiquidaciÛn:** Una vez que procesas el pago (por ejemplo, indicando que pagÛ por pago mÛvil), la deuda se elimina del registro.
+* **Cobro Actualizado:** Cuando el cliente viene a pagar d√≠as despu√©s, el sistema calcula autom√°ticamente el monto equivalente en bol√≠vares bas√°ndose en la tasa del d√≥lar del d√≠a actual.
+* **Liquidaci√≥n:** Una vez que procesas el pago (por ejemplo, indicando que pag√≥ por pago m√≥vil), la deuda se elimina del registro.
 
 ---
 
-## 4. GestiÛn de Inventario
-MantÈn el control total de los artÌculos que vendes y sus cantidades.
+## 4. Gesti√≥n de Inventario
+Mant√©n el control total de los art√≠culos que vendes y sus cantidades.
 
-* **Nuevo Producto:** Selecciona "nuevo producto" para registrar un artÌculo desde cero, ingresando su nombre, el valor de costo (compra), el precio de venta en dÛlares y la cantidad de existencias iniciales.
-* **Surtir Existencias (Õcono Verde):** Si necesitas agregar m·s unidades a un producto ya existente, selecciona el Ìcono verde, ingresa cu·ntas unidades nuevas vas a ingresar, confirma su valor de compra y venta, y el inventario se sumar·.
-* **Editar Producto (Õcono Azul):** Usa el Ìcono azul para modificar los detalles de un producto registrado, como corregir su nombre, cambiar el valor de costo o ajustar el precio de venta.
+* **Nuevo Producto:** Selecciona "nuevo producto" para registrar un art√≠culo desde cero, ingresando su nombre, el valor de costo (compra), el precio de venta en d√≥lares y la cantidad de existencias iniciales.
+* **Surtir Existencias (√çcono Verde):** Si necesitas agregar m√°s unidades a un producto ya existente, selecciona el √≠cono verde, ingresa cu√°ntas unidades nuevas vas a ingresar, confirma su valor de compra y venta, y el inventario se sumar√°.
+* **Editar Producto (√çcono Azul):** Usa el √≠cono azul para modificar los detalles de un producto registrado, como corregir su nombre, cambiar el valor de costo o ajustar el precio de venta.
 
 ---
 
 ## 5. Historial de Ventas y Cierre de Caja
 
-* **Cierre de Caja:** El sistema registra cada venta separada por su mÈtodo de pago y detalla quÈ artÌculos se vendieron en cada factura. Puedes generar y descargar este reporte a tu telÈfono al final del dÌa para llevar un control exacto de los movimientos.
-* **Historial de Ventas (Reportes):** AquÌ se alojan todas las facturas generadas y sus totales. Puedes generar reportes filtrados por el dÌa anterior (˙til para recuperar un cierre previo), por semana (ideal para balances los domingos), por mes completo, o un reporte histÛrico global con todos los registros desde que usas el sistema.
+* **Cierre de Caja:** El sistema registra cada venta separada por su m√©todo de pago y detalla qu√© art√≠culos se vendieron en cada factura. Puedes generar y descargar este reporte a tu tel√©fono al final del d√≠a para llevar un control exacto de los movimientos.
+* **Historial de Ventas (Reportes):** Aqu√≠ se alojan todas las facturas generadas y sus totales. Puedes generar reportes filtrados por el d√≠a anterior (√∫til para recuperar un cierre previo), por semana (ideal para balances los domingos), por mes completo, o un reporte hist√≥rico global con todos los registros desde que usas el sistema.
 
 ---
 
 ## 6. Movimientos (Ingresos y Egresos)
-Este mÛdulo te permite registrar flujos de dinero que no provienen directamente de una venta.
+Este m√≥dulo te permite registrar flujos de dinero que no provienen directamente de una venta.
 
 * **Egresos:** Puedes registrar salidas de dinero, como el pago del internet de la tienda o compra de insumos.
-* **Ingresos:** Puedes anotar entradas extra de capital, como la recepciÛn de un crÈdito o un prÈstamo externo.
+* **Ingresos:** Puedes anotar entradas extra de capital, como la recepci√≥n de un cr√©dito o un pr√©stamo externo.
